@@ -70,6 +70,9 @@ class Store {
     const db = fsMod.getFirestore(app);
     this._fb = { auth, db, authMod, fsMod };
 
+    // Complete any redirect-based sign-in started on a previous page load.
+    authMod.getRedirectResult(auth).catch((e) => console.warn('redirect sign-in:', e));
+
     authMod.onAuthStateChanged(auth, (user) => {
       if (user) {
         this.user = { uid: user.uid, name: user.displayName || user.email || '' };
@@ -117,7 +120,18 @@ class Store {
     if (!this._fb) return;
     const { auth, authMod } = this._fb;
     const provider = new authMod.GoogleAuthProvider();
-    await authMod.signInWithPopup(auth, provider);
+    // Popups are unreliable inside installed PWAs / some mobile browsers —
+    // fall back to a full-page redirect when a popup can't be used.
+    const standalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (standalone) { await authMod.signInWithRedirect(auth, provider); return; }
+    try {
+      await authMod.signInWithPopup(auth, provider);
+    } catch (e) {
+      const code = e && e.code || '';
+      if (/popup|operation-not-supported|cancelled-popup|web-storage/.test(code)) {
+        await authMod.signInWithRedirect(auth, provider);
+      } else { throw e; }
+    }
   }
 
   async signOut() {
