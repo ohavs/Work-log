@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v8';
+const CACHE = 'worklog-v9';
 const SHELL = [
   './',
   './index.html',

@@ -313,15 +313,41 @@ function renderSyncStatus() {
   const el = $('syncStatus'), btn = $('authBtn');
   if (!store.cloudAvailable) { el.textContent = 'מצב שמירה: מקומי במכשיר'; btn.hidden = true; return; }
   btn.hidden = false;
-  if (store.user) { el.textContent = `מסונכרן בענן · ${store.user.name || 'מחובר'}`; btn.textContent = 'התנתקות'; }
+  if (store.user) { el.textContent = `☁ מסונכרן בענן · ${store.user.email || store.user.name || 'מחובר'}`; btn.textContent = 'התנתקות'; }
   else { el.textContent = 'מצב שמירה: מקומי · התחברו לסנכרון בענן'; btn.textContent = 'התחברות לחשבון Google'; }
+}
+
+// signed-in indicator: show the user's avatar (with a synced ring) on the
+// top-bar button, and toast once when a sign-in actually completes.
+function updateAccountUI() {
+  const btn = $('settingsBtn'), u = store.user;
+  if (u) {
+    btn.classList.add('synced');
+    btn.setAttribute('aria-label', 'החשבון שלי — ' + (u.name || ''));
+    btn.innerHTML = u.photo
+      ? `<img class="avatar" src="${u.photo}" referrerpolicy="no-referrer" alt="">`
+      : `<span class="avatar-initial">${escapeHtml((u.name || '?').trim().charAt(0) || '?')}</span>`;
+    if (sessionStorage.getItem('wl_signin_pending')) {
+      sessionStorage.removeItem('wl_signin_pending');
+      toast(`מחובר כ${u.name} · הנתונים מסונכרנים ☁`);
+    }
+  } else {
+    btn.classList.remove('synced');
+    btn.setAttribute('aria-label', 'הגדרות');
+    btn.innerHTML = svg('settings');
+  }
 }
 function submitSettings(ev) {
   ev.preventDefault();
   store.saveSettings({ name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, currency: $('sCurrency').value, goalHours: Number($('sGoal').value) || 0, theme: $('sDark').checked ? 'dark' : 'light' });
   applyTheme(); closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
 }
-async function handleAuth() { try { if (store.user) await store.signOut(); else await store.signIn(); } catch (e) { toast('ההתחברות נכשלה'); console.warn(e); } }
+async function handleAuth() {
+  try {
+    if (store.user) { await store.signOut(); toast('התנתקת'); }
+    else { sessionStorage.setItem('wl_signin_pending', '1'); await store.signIn(); }
+  } catch (e) { sessionStorage.removeItem('wl_signin_pending'); toast('ההתחברות נכשלה'); console.warn(e); }
+}
 
 // ------------------------------------------------------------------ export
 function openExport() { if (!monthEntries().length) { toast('אין רישומים לייצוא בחודש זה'); return; } openSheet($('exportSheet')); }
@@ -396,9 +422,9 @@ async function main() {
   initIcons();
   initPickers();
   bind();
-  store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderSyncStatus(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderSyncStatus(); updateAccountUI(); });
   await store.init();
-  applyTheme(); renderMonth(); renderHero(); renderAll();
+  applyTheme(); renderMonth(); renderHero(); renderAll(); updateAccountUI();
   if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
 }
 main();

@@ -75,7 +75,7 @@ class Store {
 
     authMod.onAuthStateChanged(auth, (user) => {
       if (user) {
-        this.user = { uid: user.uid, name: user.displayName || user.email || '' };
+        this.user = { uid: user.uid, name: user.displayName || user.email || '', email: user.email || '', photo: user.photoURL || '' };
         this._attachCloud();
       } else {
         this.user = null;
