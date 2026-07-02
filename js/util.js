@@ -7,6 +7,15 @@ export const MONTHS = [
 
 export const DOW = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
+// Entry types
+export const TYPE_META = {
+  work:     { label: 'עבודה', emoji: '💼' },
+  vacation: { label: 'חופשה', emoji: '🏖️' },
+  sick:     { label: 'מחלה', emoji: '🤒' },
+};
+export function entryType(e) { return e.type && TYPE_META[e.type] ? e.type : 'work'; }
+export function isWork(e) { return entryType(e) === 'work'; }
+
 // "2026-07-02" -> local Date (noon, avoids TZ edge cases)
 export function parseDate(iso) {
   const [y, m, d] = iso.split('-').map(Number);
@@ -39,6 +48,7 @@ export function minToTime(mins) {
 
 // Worked minutes for an entry (handles crossing midnight + break)
 export function workedMinutes(entry) {
+  if (entry.type && entry.type !== 'work') return 0; // vacation / sick = no worked hours
   const s = timeToMin(entry.start);
   let e = timeToMin(entry.end);
   if (s == null || e == null) return 0;
@@ -77,4 +87,23 @@ export function inMonth(entry, year, month) {
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+// ISO date of the Sunday that starts the week containing `date` (week: Sun–Sat)
+export function weekStartISO(date) {
+  const d = new Date(date);
+  d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() - d.getDay()); // back to Sunday
+  return toISO(d);
+}
+
+// "6–12 ביולי" style label for a week starting at Sunday `iso`
+export function weekLabel(iso) {
+  const start = parseDate(iso);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  if (start.getMonth() === end.getMonth()) {
+    return `${start.getDate()}–${end.getDate()} ב${MONTHS[start.getMonth()]}`;
+  }
+  return `${start.getDate()} ב${MONTHS[start.getMonth()]} – ${end.getDate()} ב${MONTHS[end.getMonth()]}`;
 }

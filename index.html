@@ -78,6 +78,9 @@
       </div>
     </section>
 
+    <!-- ============ Off-days pills ============ -->
+    <section class="off-pills" id="offPills" hidden></section>
+
     <!-- ============ Monthly goal progress ============ -->
     <section class="goal" id="goalCard" hidden>
       <div class="goal-head">
@@ -85,6 +88,15 @@
         <span class="goal-nums" id="goalNums">0 / 0 שעות</span>
       </div>
       <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+    </section>
+
+    <!-- ============ Weekly summary ============ -->
+    <section class="weekly" id="weeklyCard" hidden>
+      <button type="button" class="weekly-head" id="weeklyToggle" aria-expanded="false">
+        <span class="weekly-title">סיכום שבועי</span>
+        <svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="weekly-body" id="weeklyBody" hidden></div>
     </section>
 
     <!-- ============ Entries list ============ -->
@@ -119,23 +131,29 @@
       </div>
 
       <form id="entryForm" class="form">
+        <div class="seg" id="typeSeg" role="tablist">
+          <button type="button" data-type="work" class="on">💼 עבודה</button>
+          <button type="button" data-type="vacation">🏖️ חופשה</button>
+          <button type="button" data-type="sick">🤒 מחלה</button>
+        </div>
+
         <label class="field">
           <span>תאריך</span>
           <input type="date" id="fDate" required />
         </label>
 
-        <div class="field-row">
+        <div class="field-row time-only">
           <label class="field">
             <span>שעת התחלה</span>
-            <input type="time" id="fStart" required />
+            <input type="time" id="fStart" />
           </label>
           <label class="field">
             <span>שעת סיום</span>
-            <input type="time" id="fEnd" required />
+            <input type="time" id="fEnd" />
           </label>
         </div>
 
-        <div class="field-row">
+        <div class="field-row time-only">
           <label class="field">
             <span>הפסקה (דקות)</span>
             <input type="number" id="fBreak" min="0" step="5" value="0" inputmode="numeric" />
@@ -151,7 +169,7 @@
           <input type="text" id="fNote" maxlength="80" placeholder="לא חובה — למשל: פרויקט, מקום" />
         </label>
 
-        <div class="calc-preview" id="calcPreview">
+        <div class="calc-preview time-only" id="calcPreview">
           <span id="calcHours">0 שעות</span>
           <span id="calcPay"></span>
         </div>
@@ -218,6 +236,29 @@
 
         <p class="version">גרסה 1.0 · נבנה באהבה 🤍</p>
       </form>
+    </div>
+  </div>
+
+  <!-- ============ Export choice sheet ============ -->
+  <div class="sheet-backdrop" id="exportSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="expTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3 id="expTitle">ייצוא נתונים</h3>
+        <button class="icon-btn ghost" id="closeExport" aria-label="סגירה">
+          <svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <div class="action-list">
+        <button type="button" class="action" id="doExportPdf">
+          <span class="action-emoji">📄</span>
+          <span class="action-text"><b>ייצוא ל‑PDF</b><small>דוח מעוצב להדפסה או שמירה</small></span>
+        </button>
+        <button type="button" class="action" id="doExportCsv">
+          <span class="action-emoji">📊</span>
+          <span class="action-text"><b>ייצוא ל‑CSV</b><small>קובץ לאקסל / Google Sheets</small></span>
+        </button>
+      </div>
     </div>
   </div>
 

@@ -1,8 +1,10 @@
 import { store } from './store.js';
 import { exportPDF } from './pdf.js';
+import { exportCSV } from './csv.js';
 import {
-  MONTHS, DOW, parseDate, toISO, todayISO, timeToMin, minToTime,
+  MONTHS, DOW, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
+  entryType, isWork, weekStartISO, weekLabel,
 } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -13,6 +15,8 @@ let viewYear = now.getFullYear();
 let viewMonth = now.getMonth();
 let editingId = null;
 let tick = null;
+let formType = 'work';       // current entry-form type
+let weeklyOpen = false;      // weekly summary expanded?
 
 // ------------------------------------------------------------------ theme
 function applyTheme() {
@@ -46,21 +50,34 @@ function effRate(e) {
 
 function renderStats(entries) {
   let totalMin = 0, totalPay = 0;
-  const days = new Set();
+  const workDays = new Set();
+  const vacationDays = new Set();
+  const sickDays = new Set();
   entries.forEach((e) => {
+    const t = entryType(e);
+    if (t === 'vacation') { vacationDays.add(e.date); return; }
+    if (t === 'sick') { sickDays.add(e.date); return; }
     const mins = workedMinutes(e);
     totalMin += mins;
     totalPay += decimalHours(mins) * effRate(e);
-    days.add(e.date);
+    workDays.add(e.date);
   });
 
   $('statHours').textContent = fmtHours(totalMin);
-  $('statDays').textContent = days.size;
+  $('statDays').textContent = workDays.size;
 
   const rate = Number(store.settings.rate) || 0;
   const anyRate = rate > 0 || entries.some((e) => e.rate);
   $('statPayCard').hidden = !anyRate;
   if (anyRate) $('statPay').textContent = fmtMoney(totalPay, store.settings.currency);
+
+  // off-day pills
+  const pills = $('offPills');
+  const parts = [];
+  if (vacationDays.size) parts.push(`<span class="off-pill">🏖️ <b>${vacationDays.size}</b> ימי חופשה</span>`);
+  if (sickDays.size) parts.push(`<span class="off-pill">🤒 <b>${sickDays.size}</b> ימי מחלה</span>`);
+  pills.innerHTML = parts.join('');
+  pills.hidden = parts.length === 0;
 
   // goal
   const goal = Number(store.settings.goalHours) || 0;
@@ -107,19 +124,34 @@ function renderEntries(entries) {
       <div class="day-head">
         <span class="dow">יום ${DOW[d.getDay()]}</span>
         <span>${d.getDate()} ב${MONTHS[d.getMonth()]}</span>
-        <span class="dtotal">${fmtHours(dayMin)} שעות</span>
+        ${dayMin > 0 ? `<span class="dtotal">${fmtHours(dayMin)} שעות</span>` : ''}
       </div>`;
 
     list.forEach((e) => {
+      const card = document.createElement('div');
+      card.dataset.id = e.id;
+      const t = entryType(e);
+
+      if (t !== 'work') {
+        const meta = TYPE_META[t];
+        card.className = 'entry off';
+        card.innerHTML = `
+          <div class="entry-badge">${meta.emoji}</div>
+          <div class="entry-main">
+            <span class="entry-range">${meta.label}</span>
+            <span class="entry-meta">${e.note ? `<span class="note">${escapeHtml(e.note)}</span>` : 'יום מלא'}</span>
+          </div>`;
+        group.appendChild(card);
+        return;
+      }
+
       const mins = workedMinutes(e);
       const r = effRate(e);
       const pay = decimalHours(mins) * r;
       const meta = [];
       if (e.breakMin) meta.push(`הפסקה ${e.breakMin} דק׳`);
       if (e.note) meta.push(`<span class="note">${escapeHtml(e.note)}</span>`);
-      const card = document.createElement('div');
       card.className = 'entry';
-      card.dataset.id = e.id;
       card.innerHTML = `
         <div class="entry-time">
           <span class="big">${fmtHours(mins)}</span>
@@ -137,9 +169,38 @@ function renderEntries(entries) {
   }
 }
 
+function renderWeekly(entries) {
+  const card = $('weeklyCard');
+  const body = $('weeklyBody');
+
+  // sum worked minutes per week (Sun–Sat)
+  const weeks = new Map();
+  entries.forEach((e) => {
+    if (!isWork(e)) return;
+    const wk = weekStartISO(parseDate(e.date));
+    weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e));
+  });
+
+  const rows = [...weeks.entries()].filter(([, m]) => m > 0).sort((a, b) => a[0].localeCompare(b[0]));
+  if (rows.length < 2) { card.hidden = true; return; } // only useful with multiple weeks
+  card.hidden = false;
+
+  const max = Math.max(...rows.map(([, m]) => m));
+  body.innerHTML = rows.map(([wk, mins]) => `
+    <div class="week-row">
+      <span class="week-name">${weekLabel(wk)}</span>
+      <span class="week-bar"><span class="week-bar-fill" style="width:${Math.round((mins / max) * 100)}%"></span></span>
+      <span class="week-val">${fmtHours(mins)}</span>
+    </div>`).join('');
+
+  $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen));
+  body.hidden = !weeklyOpen;
+}
+
 function renderAll() {
   const entries = monthEntries();
   renderStats(entries);
+  renderWeekly(entries);
   renderEntries(entries);
 }
 
@@ -217,6 +278,12 @@ function toggleClock() {
 function openSheet(sheet) { sheet.hidden = false; }
 function closeSheet(sheet) { sheet.hidden = true; }
 
+function setFormType(type) {
+  formType = TYPE_META[type] ? type : 'work';
+  $('typeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.type === formType));
+  $('entryForm').classList.toggle('off-mode', formType !== 'work');
+}
+
 function openEntry(id = null) {
   editingId = id;
   const sheet = $('entrySheet');
@@ -226,11 +293,12 @@ function openEntry(id = null) {
     if (!e) return;
     $('sheetTitle').textContent = 'עריכת רישום';
     $('fDate').value = e.date;
-    $('fStart').value = e.start;
-    $('fEnd').value = e.end;
+    $('fStart').value = e.start || '09:00';
+    $('fEnd').value = e.end || '17:00';
     $('fBreak').value = e.breakMin || 0;
     $('fRate').value = e.rate ?? '';
     $('fNote').value = e.note || '';
+    setFormType(entryType(e));
     del.hidden = false;
   } else {
     $('sheetTitle').textContent = 'רישום חדש';
@@ -239,6 +307,7 @@ function openEntry(id = null) {
     $('fStart').value = '09:00';
     $('fEnd').value = '17:00';
     $('fBreak').value = 0;
+    setFormType('work');
     del.hidden = true;
   }
   updateCalc();
@@ -259,15 +328,24 @@ function updateCalc() {
 
 function submitEntry(ev) {
   ev.preventDefault();
-  const data = {
-    date: $('fDate').value,
-    start: $('fStart').value,
-    end: $('fEnd').value,
-    breakMin: Number($('fBreak').value) || 0,
-    rate: $('fRate').value === '' ? '' : Number($('fRate').value),
-    note: $('fNote').value.trim(),
-  };
-  if (!data.date || !data.start || !data.end) return;
+  const date = $('fDate').value;
+  if (!date) return;
+
+  let data;
+  if (formType === 'work') {
+    data = {
+      type: 'work',
+      date,
+      start: $('fStart').value,
+      end: $('fEnd').value,
+      breakMin: Number($('fBreak').value) || 0,
+      rate: $('fRate').value === '' ? '' : Number($('fRate').value),
+      note: $('fNote').value.trim(),
+    };
+    if (!data.start || !data.end) { toast('נא למלא שעת התחלה וסיום'); return; }
+  } else {
+    data = { type: formType, date, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
+  }
 
   if (editingId) {
     store.updateEntry(editingId, data);
@@ -346,15 +424,31 @@ async function handleAuth() {
 }
 
 // ------------------------------------------------------------------ export
-async function doExport() {
+function openExport() {
+  if (!monthEntries().length) { toast('אין רישומים לייצוא בחודש זה'); return; }
+  openSheet($('exportSheet'));
+}
+
+async function runExportPdf() {
+  closeSheet($('exportSheet'));
   const entries = monthEntries();
-  if (!entries.length) { toast('אין רישומים לייצוא בחודש זה'); return; }
   toast('פתחו את חלון ההדפסה ובחרו "שמירה כ‑PDF"');
   try {
     await exportPDF({ entries, settings: store.settings, year: viewYear, month: viewMonth });
   } catch (e) {
     console.error(e);
     toast('שגיאה בייצוא ה‑PDF');
+  }
+}
+
+function runExportCsv() {
+  closeSheet($('exportSheet'));
+  try {
+    exportCSV({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
+    toast('קובץ ה‑CSV הורד');
+  } catch (e) {
+    console.error(e);
+    toast('שגיאה בייצוא ה‑CSV');
   }
 }
 
@@ -385,6 +479,16 @@ function bind() {
   $('entryForm').onsubmit = submitEntry;
   $('deleteEntry').onclick = deleteCurrentEntry;
   ['fStart', 'fEnd', 'fBreak', 'fRate'].forEach((id) => $(id).addEventListener('input', updateCalc));
+  $('typeSeg').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-type]');
+    if (b) setFormType(b.dataset.type);
+  });
+
+  $('weeklyToggle').onclick = () => {
+    weeklyOpen = !weeklyOpen;
+    $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen));
+    $('weeklyBody').hidden = !weeklyOpen;
+  };
 
   $('settingsBtn').onclick = openSettings;
   $('closeSettings').onclick = () => closeSheet($('settingsSheet'));
@@ -395,7 +499,10 @@ function bind() {
     applyTheme();
   });
 
-  $('exportBtn').onclick = doExport;
+  $('exportBtn').onclick = openExport;
+  $('closeExport').onclick = () => closeSheet($('exportSheet'));
+  $('doExportPdf').onclick = runExportPdf;
+  $('doExportCsv').onclick = runExportCsv;
 
   // tap an entry to edit
   $('entries').addEventListener('click', (e) => {

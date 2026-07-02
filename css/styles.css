@@ -156,6 +156,38 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .stat-pay .stat-value { color: var(--accent); }
 .stat-pay[hidden] { display: none; }
 
+/* ---------- Off-day pills ---------- */
+.off-pills { display: flex; gap: 10px; margin-bottom: 16px; }
+.off-pills[hidden] { display: none; }
+.off-pill {
+  display: flex; align-items: center; gap: 7px;
+  background: var(--surface); border-radius: 999px;
+  padding: 8px 14px; font-size: 13px; font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+.off-pill b { font-weight: 800; }
+
+/* ---------- Weekly summary ---------- */
+.weekly {
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+  margin-bottom: 20px;
+  overflow: hidden;
+}
+.weekly-head {
+  width: 100%; display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 18px; font-weight: 700; font-size: 15px; color: var(--text);
+}
+.weekly-head .chev { width: 20px; height: 20px; color: var(--text-soft); transition: transform .25s; }
+.weekly-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.weekly-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 12px; }
+.week-row { display: flex; align-items: center; gap: 12px; }
+.week-name { font-size: 13px; color: var(--text-soft); min-width: 92px; }
+.week-bar { flex: 1; height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+.week-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+.week-val { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 46px; text-align: start; }
+
 /* ---------- Goal ---------- */
 .goal {
   background: var(--surface);
@@ -216,6 +248,13 @@ button { font-family: inherit; cursor: pointer; border: none; background: none; 
 .entry-meta .note { color: var(--text); opacity: .8; }
 .entry-pay { font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
+.entry-badge {
+  display: grid; place-items: center;
+  width: 44px; height: 44px; border-radius: 13px;
+  background: var(--accent-soft); font-size: 22px; flex-shrink: 0;
+}
+.entry.off .entry-main .entry-range { font-size: 15px; }
+
 /* ---------- Empty ---------- */
 .empty { text-align: center; padding: 50px 20px; color: var(--text-soft); }
 .empty-emoji { font-size: 46px; margin-bottom: 10px; }
@@ -264,6 +303,34 @@ body:has(.sheet-backdrop:not([hidden])) .fab { transform: translateX(50%) scale(
 .sheet-handle { width: 42px; height: 5px; border-radius: 3px; background: var(--line); margin: 6px auto 12px; }
 .sheet-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .sheet-head h3 { font-size: 20px; }
+
+/* ---------- Segmented control ---------- */
+.seg {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--surface-2); border-radius: 14px;
+}
+.seg button {
+  flex: 1; padding: 10px 6px; border-radius: 11px;
+  font-size: 14px; font-weight: 600; color: var(--text-soft);
+  transition: background .2s, color .2s, box-shadow .2s;
+}
+.seg button.on { background: var(--surface); color: var(--text); box-shadow: var(--shadow-soft); }
+
+/* time-only fields hidden for vacation/sick */
+.form.off-mode .time-only { display: none; }
+
+/* ---------- Action list (export sheet) ---------- */
+.action-list { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+.action {
+  display: flex; align-items: center; gap: 14px; text-align: start;
+  background: var(--surface-2); border-radius: 14px; padding: 16px;
+  transition: transform .15s, background .2s;
+}
+.action:active { transform: scale(.98); }
+.action-emoji { font-size: 26px; }
+.action-text { display: flex; flex-direction: column; }
+.action-text b { font-size: 16px; font-weight: 700; }
+.action-text small { font-size: 13px; color: var(--text-soft); }
 
 /* ---------- Forms ---------- */
 .form { display: flex; flex-direction: column; gap: 14px; }
