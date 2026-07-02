@@ -425,6 +425,14 @@ async function main() {
   store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderSyncStatus(); updateAccountUI(); });
   await store.init();
   applyTheme(); renderMonth(); renderHero(); renderAll(); updateAccountUI();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // Auto-reload once when a new service worker takes control (new version).
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return; refreshing = true; location.reload();
+    });
+    // updateViaCache:'none' → always fetch a fresh sw.js to detect updates.
+    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
+  }
 }
 main();

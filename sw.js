@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v11';
+const CACHE = 'worklog-v12';
 const SHELL = [
   './',
   './index.html',
@@ -39,14 +39,15 @@ self.addEventListener('fetch', (e) => {
   if (url.pathname.startsWith('/__/')) return;
   if (/firestore|googleapis|firebaseio|identitytoolkit|gstatic\.com\/firebasejs/.test(url.href)) return;
 
-  // Same-origin app shell: cache-first, fall back to network.
+  // Same-origin app shell: NETWORK-FIRST so updates show up immediately when
+  // online; fall back to cache (then index.html) only when offline.
   if (url.origin === location.origin) {
     e.respondWith(
-      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+      fetch(req).then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return res;
-      }).catch(() => caches.match('./index.html')))
+      }).catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
     );
     return;
   }
