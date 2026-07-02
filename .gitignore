@@ -5,3 +5,7 @@ package-lock.json
 .DS_Store
 screenshot*.png
 .firebase/
+
+# python cache
+__pycache__/
+*.pyc

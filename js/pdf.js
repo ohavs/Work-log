@@ -22,7 +22,7 @@ function buildReport(el, { entries, settings, year, month }) {
       if (t === 'vacation') vacationDays++; else sickDays++;
       return `<tr>
         <td>${dateCell}</td>
-        <td colspan="4">${TYPE_META[t].emoji} ${TYPE_META[t].label}</td>
+        <td colspan="4">${TYPE_META[t].label}</td>
         <td>${(e.note || '').replace(/[<>]/g, '')}</td>
       </tr>`;
     }
@@ -41,8 +41,8 @@ function buildReport(el, { entries, settings, year, month }) {
   }).join('');
 
   const offParts = [];
-  if (vacationDays) offParts.push(`🏖️ ${vacationDays} ימי חופשה`);
-  if (sickDays) offParts.push(`🤒 ${sickDays} ימי מחלה`);
+  if (vacationDays) offParts.push(`${vacationDays} ימי חופשה`);
+  if (sickDays) offParts.push(`${sickDays} ימי מחלה`);
 
   el.innerHTML = `
     <h1>דוח שעות עבודה</h1>
