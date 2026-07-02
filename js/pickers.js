@@ -60,13 +60,15 @@ function renderCal() {
   const today = toISO(new Date());
   const grid = $('dpGrid');
   let html = '';
-  for (let i = 0; i < first; i++) html += '<span class="cal-cell empty"></span>';
   for (let d = 1; d <= days; d++) {
     const iso = `${dateState.y}-${pad2(dateState.m + 1)}-${pad2(d)}`;
     const cls = ['cal-cell'];
     if (iso === dateState.selISO) cls.push('sel');
     if (iso === today) cls.push('today');
-    html += `<button type="button" class="${cls.join(' ')}" data-iso="${iso}">${d}</button>`;
+    // offset the first day into its weekday column (RTL-aware) instead of
+    // rendering empty placeholder cells, which mis-sized the first row.
+    const style = d === 1 && first > 0 ? ` style="grid-column-start:${first + 1}"` : '';
+    html += `<button type="button" class="${cls.join(' ')}"${style} data-iso="${iso}">${d}</button>`;
   }
   grid.innerHTML = html;
 }

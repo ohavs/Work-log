@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v9';
+const CACHE = 'worklog-v10';
 const SHELL = [
   './',
   './index.html',
@@ -34,7 +34,9 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Never cache Firebase / auth traffic.
+  // Never touch Firebase reserved paths (auth handler/iframe) or auth traffic —
+  // the SW must not intercept /__/auth/* or serve index.html in their place.
+  if (url.pathname.startsWith('/__/')) return;
   if (/firestore|googleapis|firebaseio|identitytoolkit|gstatic\.com\/firebasejs/.test(url.href)) return;
 
   // Same-origin app shell: cache-first, fall back to network.
