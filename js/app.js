@@ -376,7 +376,7 @@ function bind() {
   $('settingsForm').onsubmit = submitSettings;
   $('currChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-cur]'); if (b) setCurrency(b.dataset.cur); });
   $('authBtn').onclick = handleAuth;
-  $('sDark').addEventListener('change', () => { store.settings.theme = $('sDark').checked ? 'dark' : 'light'; applyTheme(); });
+  $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
 
   $('exportBtn').onclick = openExport;
   $('closeExport').onclick = () => closeSheet($('exportSheet'));
