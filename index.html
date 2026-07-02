@@ -2,15 +2,16 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#6d5efc" />
-  <meta name="description" content="אפליקציה פשוטה ויפה למעקב אחר שעות עבודה — חודשים, ימים, שעות ושכר. שמירה בענן וייצוא ל‑PDF." />
+  <meta name="description" content="אפליקציה פשוטה ויפה למעקב אחר שעות עבודה — כניסה ויציאה בלחיצה אחת, שמירה בענן וייצוא ל‑PDF." />
   <title>מעקב שעות עבודה</title>
 
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="שעות עבודה" />
 
@@ -23,188 +24,176 @@
 <body>
   <!-- ============ Top bar ============ -->
   <header class="topbar">
-    <button class="icon-btn" id="settingsBtn" aria-label="הגדרות" title="הגדרות">
+    <button class="icon-btn" id="settingsBtn" aria-label="הגדרות">
       <svg viewBox="0 0 24 24" class="ic"><path d="M12 15.5A3.5 3.5 0 1 0 12 8.5a3.5 3.5 0 0 0 0 7Z"/><path d="M19.4 13a7.8 7.8 0 0 0 .05-1 7.8 7.8 0 0 0-.05-1l2-1.6a.5.5 0 0 0 .12-.62l-1.9-3.3a.5.5 0 0 0-.6-.22l-2.4 1a7.3 7.3 0 0 0-1.7-1l-.36-2.5a.5.5 0 0 0-.5-.42h-3.8a.5.5 0 0 0-.5.42l-.36 2.5a7.3 7.3 0 0 0-1.7 1l-2.4-1a.5.5 0 0 0-.6.22l-1.9 3.3a.5.5 0 0 0 .12.62l2 1.6a7.8 7.8 0 0 0 0 2l-2 1.6a.5.5 0 0 0-.12.62l1.9 3.3a.5.5 0 0 0 .6.22l2.4-1a7.3 7.3 0 0 0 1.7 1l.36 2.5a.5.5 0 0 0 .5.42h3.8a.5.5 0 0 0 .5-.42l.36-2.5a7.3 7.3 0 0 0 1.7-1l2.4 1a.5.5 0 0 0 .6-.22l1.9-3.3a.5.5 0 0 0-.12-.62l-2-1.6Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
     </button>
-
-    <div class="brand">
-      <span class="brand-dot"></span>
-      <h1>שעות עבודה</h1>
-    </div>
-
-    <button class="icon-btn" id="exportBtn" aria-label="ייצוא ל‑PDF" title="ייצוא ל‑PDF">
+    <div class="brand"><span class="brand-dot"></span><h1>שעות עבודה</h1></div>
+    <button class="icon-btn" id="exportBtn" aria-label="ייצוא">
       <svg viewBox="0 0 24 24" class="ic"><path d="M12 3v11m0 0-4-4m4 4 4-4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
   </header>
 
   <main class="app">
-    <!-- ============ Month navigator ============ -->
-    <section class="month-nav">
-      <button class="nav-arrow" id="nextMonth" aria-label="החודש הבא">
-        <svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <button class="month-label" id="monthLabel">
-        <span id="monthName">—</span>
-      </button>
-      <button class="nav-arrow" id="prevMonth" aria-label="החודש הקודם">
-        <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-    </section>
+    <!-- ============ HERO — one-tap clock in / out ============ -->
+    <section class="hero" id="hero">
+      <p class="hero-date" id="heroDate"></p>
 
-    <!-- ============ Live clock-in ============ -->
-    <section class="clock-card" id="clockCard">
-      <div class="clock-info">
-        <span class="clock-title" id="clockTitle">מוכן להתחיל?</span>
-        <span class="clock-sub" id="clockSub">לחצו כדי להתחיל למדוד את זמן העבודה</span>
+      <div class="timer" id="timer" hidden>
+        <span class="timer-val" id="timerVal">00:00:00</span>
+        <button type="button" class="timer-start" id="editStart">התחלת ב־09:00 · הקש לשינוי</button>
       </div>
-      <button class="clock-btn" id="clockBtn">
-        <span id="clockBtnText">התחלת עבודה</span>
+
+      <button class="punch" id="punchBtn">
+        <span class="punch-ring"><span class="punch-inner" id="punchInner">כניסה</span></span>
       </button>
+
+      <p class="hero-hint" id="heroHint">הקש כדי להתחיל — התאריך והשעה ייקלטו לבד</p>
+      <p class="hero-today" id="heroToday" hidden></p>
     </section>
 
-    <!-- ============ Summary dashboard ============ -->
-    <section class="stats">
-      <div class="stat">
-        <span class="stat-value" id="statHours">0</span>
-        <span class="stat-label">שעות החודש</span>
+    <!-- ============ History (browse past months) ============ -->
+    <section class="history">
+      <div class="month-nav">
+        <button class="nav-arrow" id="nextMonth" aria-label="החודש הבא">
+          <svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button class="month-label" id="monthLabel"><span id="monthName">—</span></button>
+        <button class="nav-arrow" id="prevMonth" aria-label="החודש הקודם">
+          <svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
       </div>
-      <div class="stat">
-        <span class="stat-value" id="statDays">0</span>
-        <span class="stat-label">ימי עבודה</span>
+
+      <div class="stats">
+        <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
+        <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
+        <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
       </div>
-      <div class="stat stat-pay" id="statPayCard">
-        <span class="stat-value" id="statPay">₪0</span>
-        <span class="stat-label">שכר משוער</span>
+
+      <div class="off-pills" id="offPills" hidden></div>
+
+      <div class="goal" id="goalCard" hidden>
+        <div class="goal-head"><span class="goal-title">יעד חודשי</span><span class="goal-nums" id="goalNums"></span></div>
+        <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
+      </div>
+
+      <div class="weekly" id="weeklyCard" hidden>
+        <button type="button" class="weekly-head" id="weeklyToggle" aria-expanded="false">
+          <span class="weekly-title">סיכום שבועי</span>
+          <svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <div class="weekly-body" id="weeklyBody" hidden></div>
+      </div>
+
+      <div class="list-head"><h2>רישומים</h2><span class="list-count" id="listCount"></span></div>
+      <div class="entries" id="entries"></div>
+
+      <div class="empty" id="emptyState" hidden>
+        <div class="empty-emoji">🗓️</div>
+        <p class="empty-title">אין רישומים לחודש הזה</p>
+        <p class="empty-sub">התחילו עם כפתור הכניסה למעלה, או הוסיפו ידנית עם +</p>
       </div>
     </section>
-
-    <!-- ============ Off-days pills ============ -->
-    <section class="off-pills" id="offPills" hidden></section>
-
-    <!-- ============ Monthly goal progress ============ -->
-    <section class="goal" id="goalCard" hidden>
-      <div class="goal-head">
-        <span class="goal-title">יעד חודשי</span>
-        <span class="goal-nums" id="goalNums">0 / 0 שעות</span>
-      </div>
-      <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
-    </section>
-
-    <!-- ============ Weekly summary ============ -->
-    <section class="weekly" id="weeklyCard" hidden>
-      <button type="button" class="weekly-head" id="weeklyToggle" aria-expanded="false">
-        <span class="weekly-title">סיכום שבועי</span>
-        <svg class="chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      </button>
-      <div class="weekly-body" id="weeklyBody" hidden></div>
-    </section>
-
-    <!-- ============ Entries list ============ -->
-    <section class="list-head">
-      <h2>רישומים</h2>
-      <span class="list-count" id="listCount"></span>
-    </section>
-
-    <section class="entries" id="entries"></section>
-
-    <div class="empty" id="emptyState" hidden>
-      <div class="empty-emoji">🗓️</div>
-      <p class="empty-title">אין עדיין רישומים לחודש הזה</p>
-      <p class="empty-sub">הוסיפו רישום ראשון עם הכפתור למטה</p>
-    </div>
   </main>
 
-  <!-- ============ Add button ============ -->
-  <button class="fab" id="addBtn" aria-label="הוספת רישום">
+  <!-- ============ Manual add ============ -->
+  <button class="fab" id="addBtn" aria-label="הוספת רישום ידני">
     <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
   </button>
 
-  <!-- ============ Entry modal ============ -->
+  <!-- ============ Entry editor sheet ============ -->
   <div class="sheet-backdrop" id="entrySheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
+        <button class="text-btn danger" id="deleteEntry" hidden>מחיקה</button>
         <h3 id="sheetTitle">רישום חדש</h3>
-        <button class="icon-btn ghost" id="closeSheet" aria-label="סגירה">
-          <svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
+        <button class="text-btn" id="closeSheet">ביטול</button>
       </div>
 
       <form id="entryForm" class="form">
-        <div class="seg" id="typeSeg" role="tablist">
+        <div class="seg" id="typeSeg">
           <button type="button" data-type="work" class="on">💼 עבודה</button>
           <button type="button" data-type="vacation">🏖️ חופשה</button>
           <button type="button" data-type="sick">🤒 מחלה</button>
         </div>
 
-        <label class="field">
+        <label class="field big">
           <span>תאריך</span>
           <input type="date" id="fDate" required />
         </label>
 
-        <div class="field-row time-only">
-          <label class="field">
-            <span>שעת התחלה</span>
-            <input type="time" id="fStart" />
-          </label>
-          <label class="field">
-            <span>שעת סיום</span>
-            <input type="time" id="fEnd" />
-          </label>
-        </div>
+        <div class="time-only">
+          <div class="time-grid">
+            <label class="field big">
+              <span>כניסה</span>
+              <input type="time" id="fStart" />
+            </label>
+            <label class="field big">
+              <span>יציאה</span>
+              <input type="time" id="fEnd" />
+            </label>
+          </div>
 
-        <div class="field-row time-only">
-          <label class="field">
+          <div class="field">
             <span>הפסקה (דקות)</span>
-            <input type="number" id="fBreak" min="0" step="5" value="0" inputmode="numeric" />
-          </label>
+            <div class="chips" id="breakChips">
+              <button type="button" data-min="0">ללא</button>
+              <button type="button" data-min="15">15</button>
+              <button type="button" data-min="30">30</button>
+              <button type="button" data-min="45">45</button>
+              <button type="button" data-min="60">60</button>
+            </div>
+            <input type="number" id="fBreak" min="0" step="5" value="0" inputmode="numeric" class="mini-num" placeholder="אחר" />
+          </div>
+
           <label class="field">
-            <span>שכר לשעה (₪)</span>
-            <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="ברירת מחדל" />
+            <span>שכר לשעה (רשות)</span>
+            <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="ברירת מחדל מההגדרות" />
           </label>
+
+          <div class="calc-preview" id="calcPreview">
+            <span id="calcHours">0 שעות</span>
+            <span id="calcPay"></span>
+          </div>
         </div>
 
         <label class="field">
-          <span>הערה</span>
-          <input type="text" id="fNote" maxlength="80" placeholder="לא חובה — למשל: פרויקט, מקום" />
+          <span>הערה (רשות)</span>
+          <input type="text" id="fNote" maxlength="80" placeholder="למשל: פרויקט / מקום" />
         </label>
 
-        <div class="calc-preview time-only" id="calcPreview">
-          <span id="calcHours">0 שעות</span>
-          <span id="calcPay"></span>
-        </div>
-
-        <div class="sheet-actions">
-          <button type="button" class="btn danger" id="deleteEntry" hidden>מחיקה</button>
-          <button type="submit" class="btn primary" id="saveEntry">שמירה</button>
-        </div>
+        <button type="submit" class="btn primary big" id="saveEntry">שמירה</button>
       </form>
     </div>
   </div>
 
-  <!-- ============ Settings modal ============ -->
+  <!-- ============ Adjust start-time sheet ============ -->
+  <div class="sheet-backdrop" id="startSheet" hidden>
+    <div class="sheet compact" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <h3>מתי התחלת?</h3>
+        <button class="text-btn" id="closeStart">ביטול</button>
+      </div>
+      <label class="field big"><span>שעת כניסה</span><input type="time" id="fStartEdit" /></label>
+      <button class="btn primary big" id="saveStart">עדכון</button>
+    </div>
+  </div>
+
+  <!-- ============ Settings sheet ============ -->
   <div class="sheet-backdrop" id="settingsSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
         <h3 id="setTitle">הגדרות</h3>
-        <button class="icon-btn ghost" id="closeSettings" aria-label="סגירה">
-          <svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
+        <button class="text-btn" id="closeSettings">סגירה</button>
       </div>
 
       <form id="settingsForm" class="form">
-        <label class="field">
-          <span>השם שלי</span>
-          <input type="text" id="sName" maxlength="40" placeholder="לדוח ה‑PDF" />
-        </label>
-
-        <div class="field-row">
-          <label class="field">
-            <span>שכר לשעה</span>
-            <input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" />
-          </label>
-          <label class="field">
+        <label class="field big"><span>השם שלי (לדוח)</span><input type="text" id="sName" maxlength="40" placeholder="לא חובה" /></label>
+        <div class="time-grid">
+          <label class="field big"><span>שכר לשעה</span><input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" /></label>
+          <label class="field big">
             <span>מטבע</span>
             <select id="sCurrency">
               <option value="₪">₪ שקל</option>
@@ -214,11 +203,7 @@
             </select>
           </label>
         </div>
-
-        <label class="field">
-          <span>יעד שעות חודשי (0 = ללא)</span>
-          <input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" />
-        </label>
+        <label class="field big"><span>יעד שעות חודשי (0 = ללא)</span><input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" /></label>
 
         <label class="switch-field">
           <span>מצב כהה</span>
@@ -230,24 +215,19 @@
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
         </div>
 
-        <div class="sheet-actions">
-          <button type="submit" class="btn primary">שמירה</button>
-        </div>
-
-        <p class="version">גרסה 1.0 · נבנה באהבה 🤍</p>
+        <button type="submit" class="btn primary big">שמירה</button>
+        <p class="version">גרסה 2.0 · נבנה באהבה 🤍</p>
       </form>
     </div>
   </div>
 
   <!-- ============ Export choice sheet ============ -->
   <div class="sheet-backdrop" id="exportSheet" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="expTitle">
+    <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <h3 id="expTitle">ייצוא נתונים</h3>
-        <button class="icon-btn ghost" id="closeExport" aria-label="סגירה">
-          <svg viewBox="0 0 24 24" class="ic"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </button>
+        <h3>ייצוא נתונים</h3>
+        <button class="text-btn" id="closeExport">סגירה</button>
       </div>
       <div class="action-list">
         <button type="button" class="action" id="doExportPdf">
@@ -262,10 +242,7 @@
     </div>
   </div>
 
-  <!-- ============ Hidden PDF report template ============ -->
   <div id="pdfReport" class="pdf-report" aria-hidden="true"></div>
-
-  <!-- ============ Toast ============ -->
   <div class="toast" id="toast" hidden></div>
 
   <script type="module" src="./js/app.js"></script>
