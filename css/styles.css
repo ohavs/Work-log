@@ -193,7 +193,10 @@ body:has(.sheet-backdrop:not([hidden])) .fab { transform: translateX(50%) scale(
 /* ============================================================
    Sheets / dialogs
    ============================================================ */
-.sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(4,32,29,.55); backdrop-filter: blur(3px); display: flex; align-items: flex-end; justify-content: center; animation: fade .2s; }
+/* lock background scroll while any sheet/dialog is open (keeps design intact) */
+html:has(.sheet-backdrop:not([hidden])), body:has(.sheet-backdrop:not([hidden])) { overflow: hidden; }
+.sheet-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(4,32,29,.55); backdrop-filter: blur(3px); display: flex; align-items: flex-end; justify-content: center; animation: fade .2s; overscroll-behavior: contain; }
+.sheet, .dialog { overscroll-behavior: contain; }
 .sheet-backdrop.center { align-items: center; padding: 24px; }
 @keyframes fade { from { opacity: 0; } }
 .sheet { width: 100%; max-width: 520px; background: var(--surface); border-radius: 30px 30px 0 0; padding: 8px 22px calc(26px + env(safe-area-inset-bottom)); box-shadow: var(--shadow-lg); animation: slideUp .32s cubic-bezier(.32,.72,0,1); max-height: 94dvh; overflow-y: auto; }
@@ -268,9 +271,10 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .switch { position: relative; width: 52px; height: 30px; }
 .switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; }
 .switch .knob { position: absolute; inset: 0; border-radius: 999px; background: var(--border); transition: background .2s; }
-.switch .knob::after { content: ""; position: absolute; top: 3px; inset-inline-end: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .2s; }
+/* standard toggle: OFF = knob left / gray, ON = knob right / colored */
+.switch .knob::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.25); transition: transform .2s; }
 .switch input:checked + .knob { background: var(--primary); }
-.switch input:checked + .knob::after { transform: translateX(-22px); }
+.switch input:checked + .knob::after { transform: translateX(22px); }
 
 .btn { width: 100%; padding: 16px; border-radius: 15px; font-size: 16px; font-weight: 800; transition: transform .15s, opacity .2s; }
 .btn.big { padding: 18px; font-size: 18px; }
