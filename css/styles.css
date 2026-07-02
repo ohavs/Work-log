@@ -254,7 +254,15 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .seg button.on .seg-ic { color: var(--primary); }
 .form.off-mode .time-only { display: none; }
 
-.calc-preview { display: flex; justify-content: space-between; align-items: center; background: var(--primary-soft); color: var(--primary); border-radius: 14px; padding: 15px 18px; font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+.calc-preview { display: flex; justify-content: space-between; align-items: center; background: var(--primary-soft); color: var(--primary); border-radius: 14px; padding: 16px 18px; margin-top: 4px; font-weight: 800; font-size: 18px; font-variant-numeric: tabular-nums; }
+
+/* progressive disclosure — optional fields under a chevron */
+.expander { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 15px 16px; border-radius: 14px; background: var(--surface-2); font-size: 15px; font-weight: 700; color: var(--fg); transition: background .2s; }
+.expander em { font-style: normal; font-weight: 500; color: var(--muted-fg); }
+.expander .chev { display: grid; place-items: center; color: var(--muted-fg); transition: transform .25s; }
+.expander .chev svg { width: 20px; height: 20px; }
+.expander[aria-expanded="true"] .chev { transform: rotate(180deg); }
+.more-body { display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
 
 .switch-field { display: flex; align-items: center; justify-content: space-between; background: var(--surface-2); border-radius: 14px; padding: 16px; font-weight: 700; }
 .switch { position: relative; width: 52px; height: 30px; }
@@ -288,7 +296,8 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .action-go svg { width: 20px; height: 20px; }
 
 /* ---------- Time wheel ---------- */
-.wheels { position: relative; display: flex; justify-content: center; align-items: stretch; gap: 6px; height: calc(var(--wheel-item) * 5); margin: 4px 0 18px; }
+/* direction:ltr keeps clock notation HH:MM (hours left, minutes right) even in RTL */
+.wheels { position: relative; direction: ltr; display: flex; justify-content: center; align-items: stretch; gap: 6px; height: calc(var(--wheel-item) * 5); margin: 4px 0 18px; }
 .wheel { height: 100%; width: 96px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; text-align: center; }
 .wheel::-webkit-scrollbar { display: none; }
 .wheel-pad { height: calc(var(--wheel-item) * 2); }

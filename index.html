@@ -138,23 +138,28 @@
             <input type="hidden" id="fBreak" value="0" />
           </div>
 
-          <div class="field">
-            <span class="field-label">שכר לשעה <em>(רשות)</em></span>
-            <div class="input-wrap">
-              <span class="input-prefix" id="rateCurr">₪</span>
-              <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="לפי ההגדרות" />
-            </div>
-          </div>
-
           <div class="calc-preview" id="calcPreview">
             <span id="calcHours">0 שעות</span>
             <span id="calcPay"></span>
           </div>
         </div>
 
-        <div class="field">
-          <span class="field-label">הערה <em>(רשות)</em></span>
-          <input type="text" id="fNote" maxlength="80" placeholder="למשל: פרויקט / מקום" />
+        <button type="button" class="expander" id="moreToggle" aria-expanded="false">
+          <span>פרטים נוספים <em>(רשות)</em></span>
+          <span class="chev" id="moreChev"></span>
+        </button>
+        <div class="more-body" id="moreBody" hidden>
+          <div class="field time-only">
+            <span class="field-label">שכר לשעה</span>
+            <div class="input-wrap">
+              <span class="input-prefix" id="rateCurr">₪</span>
+              <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="לפי ההגדרות" />
+            </div>
+          </div>
+          <div class="field">
+            <span class="field-label">הערה</span>
+            <input type="text" id="fNote" maxlength="80" placeholder="למשל: פרויקט / מקום" />
+          </div>
         </div>
 
         <button type="submit" class="btn accent big" id="saveEntry">שמירה</button>

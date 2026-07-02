@@ -18,6 +18,7 @@ let viewMonth = now.getMonth();
 let editingId = null;
 let formType = 'work';
 let weeklyOpen = false;
+let moreOpen = false;
 let tick = null;
 let lastCreatedId = null;
 let formSnapshot = '';
@@ -237,6 +238,7 @@ function openEntry(id = null) {
     $('fRate').value = ''; $('fNote').value = '';
     setFormType('work'); del.hidden = true;
   }
+  setMore(false);
   updateCalc();
   formSnapshot = serializeForm();
   openSheet($('entrySheet'));
@@ -248,6 +250,12 @@ async function tryCloseEntry() {
     if (!ok) return;
   }
   closeSheet($('entrySheet'));
+}
+
+function setMore(open) {
+  moreOpen = open;
+  $('moreBody').hidden = !open;
+  $('moreToggle').setAttribute('aria-expanded', String(open));
 }
 
 function updateCalc() {
@@ -317,7 +325,15 @@ async function handleAuth() { try { if (store.user) await store.signOut(); else 
 
 // ------------------------------------------------------------------ export
 function openExport() { if (!monthEntries().length) { toast('אין רישומים לייצוא בחודש זה'); return; } openSheet($('exportSheet')); }
-async function runExportPdf() { closeSheet($('exportSheet')); toast('פתחו את חלון ההדפסה ובחרו "שמירה כ‑PDF"'); try { await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth }); } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑PDF'); } }
+async function runExportPdf() {
+  closeSheet($('exportSheet'));
+  toast('מכין PDF…');
+  try {
+    const res = await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
+    if (res && res.method === 'file') toast('קובץ ה‑PDF הורד');
+    else toast('בחרו "שמירה כ‑PDF" בחלון ההדפסה');
+  } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑PDF'); }
+}
 function runExportCsv() { closeSheet($('exportSheet')); try { exportCSV({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth }); toast('קובץ ה‑CSV הורד'); } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑CSV'); } }
 
 // ------------------------------------------------------------------ toast
@@ -351,6 +367,7 @@ function bind() {
   $('fRate').addEventListener('input', updateCalc);
   $('breakChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-min]'); if (!b) return; setFBreak(b.dataset.min); updateCalc(); });
   $('typeSeg').addEventListener('click', (e) => { const b = e.target.closest('button[data-type]'); if (b) setFormType(b.dataset.type); });
+  $('moreToggle').onclick = () => setMore(!moreOpen);
 
   $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
 
