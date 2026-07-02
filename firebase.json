@@ -5,6 +5,10 @@
       "firebase.json",
       "firestore.rules",
       "README.md",
+      "design-system/**",
+      ".git/**",
+      ".github/**",
+      ".claude/**",
       "**/.*",
       "**/node_modules/**"
     ],

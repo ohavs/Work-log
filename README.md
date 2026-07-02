@@ -7,7 +7,9 @@
 
 ## 🔗 קישור חי
 
-**[https://ohavs.github.io/Work-log/](https://ohavs.github.io/Work-log/)** — פתחו בטלפון והתקינו למסך הבית ("הוספה למסך הבית").
+**[https://work-ccd39.web.app](https://work-ccd39.web.app)** — מתארח על Firebase Hosting, עם התחברות Google וסנכרון בין מכשירים. פתחו בטלפון והתקינו למסך הבית ("הוספה למסך הבית").
+
+<sub>(עותק ללא התחברות מתארח גם ב‑[GitHub Pages](https://ohavs.github.io/Work-log/).)</sub>
 
 ## ✨ יכולות
 
