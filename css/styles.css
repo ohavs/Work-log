@@ -168,8 +168,9 @@ svg { display: block; }
 .list-head h2 { font-size: 18px; }
 .list-count { font-size: 13px; color: var(--muted-fg); }
 
-.entries { display: flex; flex-direction: column; gap: 10px; }
-.day-head { display: flex; align-items: center; gap: 8px; padding: 10px 4px 8px; font-size: 13px; font-weight: 700; color: var(--muted-fg); }
+.entries { display: flex; flex-direction: column; gap: 22px; }
+.day-group { display: flex; flex-direction: column; gap: 10px; }
+.day-head { display: flex; align-items: center; gap: 8px; padding: 0 4px 2px; font-size: 13px; font-weight: 700; color: var(--muted-fg); }
 .day-head .dow { color: var(--primary); }
 .day-head .dtotal { margin-inline-start: auto; font-weight: 700; }
 

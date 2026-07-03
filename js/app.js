@@ -16,6 +16,7 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const ACTIVE_KEY = 'wl_active';
+const MIN_SHIFT_MS = 60000; // shifts under a minute are treated as an accidental double-tap
 
 const now = new Date();
 let viewYear = now.getFullYear();
@@ -106,6 +107,11 @@ function punch() {
   const active = getActive();
   if (active) {
     const startD = new Date(active.start), endD = new Date();
+    if (endD - startD < MIN_SHIFT_MS) { // accidental double-tap — discard instead of logging a 0-min shift
+      setActive(null); renderHero();
+      toast('המשמרת קצרה מדי ולא נשמרה · הקש “כניסה” כשמתחילים באמת');
+      return;
+    }
     const entry = { type: 'work', date: toISO(startD), jobId: jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
     setActive(null);
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
@@ -329,6 +335,7 @@ function submitEntry(ev) {
   if (formType === 'work') {
     data = { type: 'work', date, jobId, start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0, rate: $('fRate').value === '' ? '' : Number($('fRate').value), note: $('fNote').value.trim() };
     if (!data.start || !data.end) { toast('נא לבחור שעת כניסה ויציאה'); return; }
+    if (workedMinutes(data) === 0) { toast('משך המשמרת אפס · בדקו את שעות הכניסה והיציאה'); return; }
   } else {
     data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
   }
