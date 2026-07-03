@@ -259,6 +259,72 @@ function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e)
 function openSheet(s) { s.hidden = false; }
 function closeSheet(s) { s.hidden = true; }
 
+// ------------------------------------------------------------------ drag-to-dismiss
+// Touch-drag a bottom sheet downward to close it. Activates only on a downward
+// gesture that starts from the handle/header, or from the body when it's already
+// scrolled to the top — so inner scrolling and the time wheels are never hijacked.
+const SHEET_BG = 'rgba(4,32,29,.55)';
+function enableSheetDrag(backdrop, cfg) {
+  const sheet = backdrop.querySelector('.sheet');
+  if (!sheet) return;
+  let startY = 0, lastY = 0, lastT = 0, dy = 0, tracking = false, active = false, fromTop = false, startScroll = 0;
+  const reset = () => { sheet.style.transition = ''; sheet.style.transform = ''; backdrop.style.transition = ''; backdrop.style.background = ''; };
+
+  sheet.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) { tracking = false; return; }
+    const t = e.touches[0];
+    startY = lastY = t.clientY; lastT = e.timeStamp; dy = 0; active = false;
+    startScroll = sheet.scrollTop;
+    fromTop = !!e.target.closest('.sheet-handle, .sheet-head');
+    // never start a dismiss from a wheel, horizontal scroller or text field
+    const blocked = !fromTop && !!e.target.closest('.wheels, .wheel, input, textarea, .job-filter, .chips');
+    tracking = !blocked;
+  }, { passive: true });
+
+  sheet.addEventListener('touchmove', (e) => {
+    if (!tracking) return;
+    const t = e.touches[0];
+    dy = t.clientY - startY;
+    if (!active) {
+      if (dy > 6 && (fromTop || startScroll <= 0)) { active = true; sheet.style.transition = 'none'; }
+      else if (dy < -2 || startScroll > 0) { tracking = false; return; }
+      else return;
+    }
+    if (dy <= 0) { sheet.style.transform = ''; backdrop.style.background = SHEET_BG; }
+    else {
+      e.preventDefault();
+      sheet.style.transform = `translateY(${dy}px)`;
+      backdrop.style.background = `rgba(4,32,29,${Math.max(0, 0.55 - dy / 700).toFixed(3)})`;
+    }
+    lastY = t.clientY; lastT = e.timeStamp;
+  }, { passive: false });
+
+  const finish = (e) => {
+    if (!tracking) return; tracking = false;
+    if (!active) return; active = false;
+    const ct = e.changedTouches && e.changedTouches[0];
+    const endY = ct ? ct.clientY : lastY;
+    const total = endY - startY;
+    const vel = (endY - lastY) / Math.max(1, e.timeStamp - lastT); // px/ms, last segment
+    const h = sheet.getBoundingClientRect().height || 400;
+    if (total > Math.min(150, h * 0.28) || (vel > 0.5 && total > 40)) dismissSheet(backdrop, sheet, cfg, reset);
+    else { sheet.style.transition = ''; sheet.style.transform = ''; backdrop.style.background = SHEET_BG; requestAnimationFrame(() => { backdrop.style.background = ''; }); }
+  };
+  sheet.addEventListener('touchend', finish);
+  sheet.addEventListener('touchcancel', finish);
+}
+function dismissSheet(backdrop, sheet, cfg, reset) {
+  if (cfg.guard && cfg.guard()) { reset(); cfg.guarded(); return; } // e.g. unsaved-changes prompt
+  let done = false;
+  const finishHide = () => { if (done) return; done = true; sheet.removeEventListener('transitionend', finishHide); cfg.hide(); reset(); };
+  sheet.style.transition = 'transform .24s cubic-bezier(.32,.72,0,1)';
+  sheet.style.transform = 'translateY(100%)';
+  backdrop.style.transition = 'background .24s';
+  backdrop.style.background = 'rgba(4,32,29,0)';
+  sheet.addEventListener('transitionend', finishHide);
+  setTimeout(finishHide, 320);
+}
+
 function setFormType(type) {
   formType = TYPE_LABEL[type] ? type : 'work';
   $('typeSeg').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.type === formType));
@@ -857,6 +923,10 @@ function bind() {
   // backdrop taps: entry sheet uses unsaved guard; others close directly
   $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
   ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+
+  // drag-down-to-dismiss on every bottom sheet
+  enableSheetDrag($('entrySheet'), { guard: isDirty, guarded: tryCloseEntry, hide: () => closeSheet($('entrySheet')) });
+  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'timePicker', 'datePicker'].forEach((id) => enableSheetDrag($(id), { hide: () => { $(id).hidden = true; } }));
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
