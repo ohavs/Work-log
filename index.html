@@ -57,6 +57,8 @@
         <button class="chip-btn" id="exportBtn" aria-label="ייצוא"><span data-ic="export"></span></button>
       </div>
 
+      <div class="job-filter" id="jobFilterR" hidden></div>
+
       <div class="stats compact">
         <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
         <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
@@ -100,6 +102,7 @@
         </div>
         <button class="chip-btn" id="payrollBtn" aria-label="הגדרות שכר ומיסים"><span data-ic="settings"></span></button>
       </div>
+      <div class="job-filter" id="jobFilterM" hidden></div>
       <div id="moreCards"></div>
     </section>
   </main>
@@ -126,6 +129,12 @@
           <button type="button" data-type="work" class="on"><span class="seg-ic" data-ic="work"></span>עבודה</button>
           <button type="button" data-type="vacation"><span class="seg-ic" data-ic="vacation"></span>חופשה</button>
           <button type="button" data-type="sick"><span class="seg-ic" data-ic="sick"></span>מחלה</button>
+        </div>
+
+        <div class="field" id="jobField" hidden>
+          <span class="field-label">מקום עבודה</span>
+          <div class="chips wrap" id="jobChips"></div>
+          <input type="hidden" id="fJob" />
         </div>
 
         <div class="field">
@@ -220,6 +229,12 @@
           </div>
         </div>
 
+        <div class="field">
+          <span class="field-label">מקומות עבודה <em>(שכר לכל אחד)</em></span>
+          <div class="jobs-list" id="jobsList"></div>
+          <button type="button" class="btn ghost-line" id="addJobBtn">+ הוספת מקום עבודה</button>
+        </div>
+
         <label class="switch-field">
           <span>מצב כהה</span>
           <span class="switch"><input type="checkbox" id="sDark" /><span class="knob"></span></span>
@@ -230,6 +245,23 @@
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
         </div>
 
+        <button type="submit" class="btn accent big">שמירה</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Job editor sheet ============ -->
+  <div class="sheet-backdrop" id="jobSheet" hidden>
+    <div class="sheet compact" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <button class="text-btn danger" id="deleteJob" hidden>מחיקה</button>
+        <h3 id="jobSheetTitle">מקום עבודה</h3>
+        <button class="text-btn" id="closeJob">ביטול</button>
+      </div>
+      <form id="jobForm" class="form">
+        <div class="field big"><span class="field-label">שם המקום</span><input type="text" id="jName" maxlength="30" placeholder="למשל: מסעדה, משמרות, פרויקט" required /></div>
+        <div class="field"><span class="field-label">שכר לשעה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="jRate" min="0" step="0.5" inputmode="decimal" placeholder="0" /></div></div>
         <button type="submit" class="btn accent big">שמירה</button>
       </form>
     </div>

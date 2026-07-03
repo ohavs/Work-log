@@ -19,8 +19,13 @@ export function payrollOf(settings) {
   return { ...DEFAULT_PAYROLL, ...(settings.payroll || {}) };
 }
 
-function rateOf(e, settings) {
-  return e.rate != null && e.rate !== '' ? Number(e.rate) : (Number(settings.rate) || 0);
+export function rateOf(e, settings) {
+  if (e.rate != null && e.rate !== '') return Number(e.rate) || 0;
+  if (e.jobId && Array.isArray(settings.jobs)) {
+    const j = settings.jobs.find((x) => x.id === e.jobId);
+    if (j && j.rate !== '' && j.rate != null) return Number(j.rate) || 0;
+  }
+  return Number(settings.rate) || 0;
 }
 
 // --- overtime: split a single day's hours into 100% / 125% / 150% tiers ---

@@ -5,8 +5,9 @@ import { initIcons, svg } from './icons.js';
 import { initPickers, openTimePicker, openDatePicker, showConfirm } from './pickers.js';
 import {
   DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
-  yearlyByMonth, averages, vacationBalance, recreationAnnual,
+  yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf,
 } from './finance.js';
+import { uid } from './util.js';
 import {
   MONTHS, DOW, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -23,6 +24,8 @@ let editingId = null;
 let formType = 'work';
 let weeklyOpen = false;
 let moreOpen = false;
+let jobFilter = null;       // null = all workplaces; else jobId
+let editingJobId = null;
 let tick = null;
 let lastCreatedId = null;
 let formSnapshot = '';
@@ -100,7 +103,7 @@ function punch() {
   const active = getActive();
   if (active) {
     const startD = new Date(active.start), endD = new Date();
-    const entry = { type: 'work', date: toISO(startD), start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
+    const entry = { type: 'work', date: toISO(startD), jobId: jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
     setActive(null);
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
     const created = store.addEntry(entry); lastCreatedId = created.id;
@@ -136,8 +139,11 @@ function shiftMonth(delta) {
   if (viewMonth > 11) { viewMonth = 0; viewYear++; }
   renderMonth(); renderAll(); renderMore();
 }
-function monthEntries() { return store.entries.filter((e) => inMonth(e, viewYear, viewMonth)).sort((a, b) => b.date.localeCompare(a.date) || (b.start || '').localeCompare(a.start || '')); }
-function effRate(e) { return e.rate != null && e.rate !== '' ? Number(e.rate) : (Number(store.settings.rate) || 0); }
+function jobFilteredEntries() { return jobFilter ? store.entries.filter((e) => (e.jobId || '') === jobFilter) : store.entries; }
+function monthEntries() { return jobFilteredEntries().filter((e) => inMonth(e, viewYear, viewMonth)).sort((a, b) => b.date.localeCompare(a.date) || (b.start || '').localeCompare(a.start || '')); }
+function effRate(e) { return rateOf(e, store.settings); }
+function jobsList() { return Array.isArray(store.settings.jobs) ? store.settings.jobs : []; }
+function jobName(id) { const j = jobsList().find((x) => x.id === id); return j ? j.name : ''; }
 
 function renderStats(entries) {
   let totalMin = 0, totalPay = 0;
@@ -202,12 +208,15 @@ function renderEntries(entries) {
     list.forEach((e) => {
       const card = document.createElement('div'); card.dataset.id = e.id;
       const t = entryType(e);
+      const jn = e.jobId ? jobName(e.jobId) : '';
       if (t !== 'work') {
         card.className = `entry ${t === 'vacation' ? 'vac' : 'sick'}`;
-        card.innerHTML = `<div class="entry-badge">${svg(t)}</div><div class="entry-main"><span class="entry-range">${TYPE_LABEL[t]}</span><span class="entry-meta">${e.note ? `<span class="note">${escapeHtml(e.note)}</span>` : 'יום מלא'}</span></div><span class="entry-edit">${svg('pencil')}</span>`;
+        const off = jn ? `<span class="entry-job">${escapeHtml(jn)}</span>` : (e.note ? `<span class="note">${escapeHtml(e.note)}</span>` : 'יום מלא');
+        card.innerHTML = `<div class="entry-badge">${svg(t)}</div><div class="entry-main"><span class="entry-range">${TYPE_LABEL[t]}</span><span class="entry-meta">${off}</span></div><span class="entry-edit">${svg('pencil')}</span>`;
       } else {
         const mins = workedMinutes(e), r = effRate(e), pay = decimalHours(mins) * r;
         const meta = [];
+        if (jn) meta.push(`<span class="entry-job">${escapeHtml(jn)}</span>`);
         if (e.breakMin) meta.push(`הפסקה ${e.breakMin} דק׳`);
         if (e.note) meta.push(`<span class="note">${escapeHtml(e.note)}</span>`);
         card.className = 'entry';
@@ -245,26 +254,40 @@ function setFBreak(min) {
   $('breakChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.min) === Number(min)));
 }
 
+function renderJobChips(sel) {
+  const jobs = jobsList();
+  $('jobField').hidden = jobs.length === 0;
+  if (!jobs.length) { $('fJob').value = ''; return; }
+  $('jobChips').innerHTML = `<button type="button" data-job="">ללא</button>` +
+    jobs.map((j) => `<button type="button" data-job="${j.id}">${escapeHtml(j.name)}</button>`).join('');
+  setJobChip(sel || '');
+}
+function setJobChip(id) {
+  $('fJob').value = id;
+  $('jobChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.job === id));
+}
+
 function serializeForm() {
-  return JSON.stringify([formType, $('fDate').value, $('fStart').value, $('fEnd').value, $('fBreak').value, $('fRate').value, $('fNote').value.trim()]);
+  return JSON.stringify([formType, $('fJob').value, $('fDate').value, $('fStart').value, $('fEnd').value, $('fBreak').value, $('fRate').value, $('fNote').value.trim()]);
 }
 function isDirty() { return serializeForm() !== formSnapshot; }
 
 function openEntry(id = null) {
   editingId = id;
   const del = $('deleteEntry');
-  $('rateCurr').textContent = store.settings.currency || '₪';
   if (id) {
     const e = store.entries.find((x) => x.id === id);
     if (!e) return;
     $('sheetTitle').textContent = 'עריכת רישום';
     setFDate(e.date); setFStart(e.start || '09:00'); setFEnd(e.end || '17:00'); setFBreak(e.breakMin || 0);
     $('fRate').value = e.rate ?? ''; $('fNote').value = e.note || '';
+    renderJobChips(e.jobId || '');
     setFormType(entryType(e)); del.hidden = false;
   } else {
     $('sheetTitle').textContent = 'רישום חדש';
     setFDate(todayISO()); setFStart('09:00'); setFEnd('17:00'); setFBreak(0);
     $('fRate').value = ''; $('fNote').value = '';
+    renderJobChips(jobFilter || '');
     setFormType('work'); del.hidden = true;
   }
   setMore(false);
@@ -290,7 +313,7 @@ function setMore(open) {
 function updateCalc() {
   const mins = workedMinutes({ start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0 });
   $('calcHours').textContent = `${fmtHours(mins)} שעות`;
-  const rate = $('fRate').value !== '' ? Number($('fRate').value) : (Number(store.settings.rate) || 0);
+  const rate = rateOf({ rate: $('fRate').value === '' ? '' : Number($('fRate').value), jobId: $('fJob').value }, store.settings);
   $('calcPay').textContent = rate ? fmtMoney(decimalHours(mins) * rate, store.settings.currency) : '';
 }
 
@@ -298,12 +321,13 @@ function submitEntry(ev) {
   ev.preventDefault();
   const date = $('fDate').value;
   if (!date) return;
+  const jobId = $('fJob').value || '';
   let data;
   if (formType === 'work') {
-    data = { type: 'work', date, start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0, rate: $('fRate').value === '' ? '' : Number($('fRate').value), note: $('fNote').value.trim() };
+    data = { type: 'work', date, jobId, start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0, rate: $('fRate').value === '' ? '' : Number($('fRate').value), note: $('fNote').value.trim() };
     if (!data.start || !data.end) { toast('נא לבחור שעת כניסה ויציאה'); return; }
   } else {
-    data = { type: formType, date, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
+    data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
   }
   if (editingId) { store.updateEntry(editingId, data); toast('הרישום עודכן'); }
   else { const c = store.addEntry(data); lastCreatedId = c.id; toast('הרישום נוסף'); }
@@ -331,8 +355,67 @@ function openSettings() {
   $('sGoal').value = s.goalHours || 0;
   $('sDark').checked = s.theme === 'dark';
   renderPaletteRow();
+  renderJobsList();
   renderSyncStatus();
   openSheet($('settingsSheet'));
+}
+
+// ------------------------------------------------------------------ workplaces / jobs
+function renderJobFilter() {
+  const jobs = jobsList();
+  const html = jobs.length
+    ? `<button class="${jobFilter === null ? 'on' : ''}" data-job="">הכל</button>` +
+      jobs.map((j) => `<button class="${jobFilter === j.id ? 'on' : ''}" data-job="${j.id}">${escapeHtml(j.name)}</button>`).join('')
+    : '';
+  ['jobFilterR', 'jobFilterM'].forEach((id) => { const el = $(id); if (el) { el.innerHTML = html; el.hidden = jobs.length === 0; } });
+}
+function setJobFilter(id) { jobFilter = id || null; renderJobFilter(); renderAll(); renderMore(); }
+
+function renderJobsList() {
+  const jobs = jobsList(), el = $('jobsList');
+  el.innerHTML = jobs.length
+    ? jobs.map((j) => `<div class="job-row" data-job="${j.id}"><span class="jn">${escapeHtml(j.name)}</span><span class="jr">₪${j.rate || 0}/שעה</span><span class="jedit">${svg('pencil')}</span></div>`).join('')
+    : `<div class="jobs-empty">אין מקומות עבודה. הוסיפו כדי לשייך רישומים ולראות שכר נפרד לכל מקום.</div>`;
+}
+function openJob(id) {
+  editingJobId = id;
+  const del = $('deleteJob');
+  if (id) {
+    const j = jobsList().find((x) => x.id === id);
+    if (!j) return;
+    $('jobSheetTitle').textContent = 'עריכת מקום';
+    $('jName').value = j.name; $('jRate').value = j.rate ?? '';
+    del.hidden = false;
+  } else {
+    $('jobSheetTitle').textContent = 'מקום עבודה חדש';
+    $('jobForm').reset();
+    del.hidden = true;
+  }
+  openSheet($('jobSheet'));
+}
+function submitJob(ev) {
+  ev.preventDefault();
+  const name = $('jName').value.trim();
+  if (!name) { toast('נא להזין שם'); return; }
+  const rate = $('jRate').value === '' ? 0 : Number($('jRate').value) || 0;
+  let jobs = jobsList().slice();
+  if (editingJobId) jobs = jobs.map((j) => (j.id === editingJobId ? { ...j, name, rate } : j));
+  else jobs.push({ id: uid(), name, rate });
+  store.saveSettings({ jobs });
+  closeSheet($('jobSheet'));
+  renderJobsList(); renderJobFilter();
+  toast('נשמר');
+}
+async function deleteCurrentJob() {
+  if (!editingJobId) return;
+  const ok = await showConfirm({ title: 'למחוק מקום עבודה?', message: 'הרישומים שלו יישארו — אבל בלי שיוך למקום.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
+  if (!ok) return;
+  const jobs = jobsList().filter((j) => j.id !== editingJobId);
+  if (jobFilter === editingJobId) jobFilter = null;
+  store.saveSettings({ jobs });
+  closeSheet($('jobSheet'));
+  renderJobsList(); renderJobFilter(); renderAll(); renderMore();
+  toast('נמחק');
 }
 function renderPaletteRow() {
   const row = $('paletteRow');
@@ -415,7 +498,7 @@ function money(n) { return fmtMoney(n, '₪'); }
 function renderMore() {
   const box = $('moreCards');
   if (!box) return;
-  const entries = store.entries, s = store.settings;
+  const entries = jobFilteredEntries(), s = store.settings;
   const p = payrollOf(s);
   const ps = payslip(entries, s, viewYear, viewMonth);
   const hasData = ps.gross > 0;
@@ -610,7 +693,16 @@ function bind() {
   $('fRate').addEventListener('input', updateCalc);
   $('breakChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-min]'); if (!b) return; setFBreak(b.dataset.min); updateCalc(); });
   $('typeSeg').addEventListener('click', (e) => { const b = e.target.closest('button[data-type]'); if (b) setFormType(b.dataset.type); });
+  $('jobChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-job]'); if (b) { setJobChip(b.dataset.job); updateCalc(); } });
   $('moreToggle').onclick = () => setMore(!moreOpen);
+
+  // job filters (Reports + עוד) and management
+  ['jobFilterR', 'jobFilterM'].forEach((id) => $(id).addEventListener('click', (e) => { const b = e.target.closest('button[data-job]'); if (b) setJobFilter(b.dataset.job); }));
+  $('addJobBtn').onclick = () => openJob(null);
+  $('jobsList').addEventListener('click', (e) => { const r = e.target.closest('.job-row[data-job]'); if (r) openJob(r.dataset.job); });
+  $('closeJob').onclick = () => closeSheet($('jobSheet'));
+  $('jobForm').onsubmit = submitJob;
+  $('deleteJob').onclick = deleteCurrentJob;
 
   $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
 
@@ -630,7 +722,7 @@ function bind() {
 
   // backdrop taps: entry sheet uses unsaved guard; others close directly
   $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
-  ['settingsSheet', 'exportSheet', 'payrollSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
@@ -639,9 +731,9 @@ async function main() {
   initIcons();
   initPickers();
   bind();
-  store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderMore(); renderSyncStatus(); updateAccountUI(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); renderAll(); renderMore(); renderSyncStatus(); updateAccountUI(); });
   await store.init();
-  applyTheme(); renderMonth(); renderHero(); renderAll(); updateAccountUI();
+  applyTheme(); renderMonth(); renderHero(); renderJobFilter(); renderAll(); updateAccountUI();
   if ('serviceWorker' in navigator) {
     // Auto-reload once when a new service worker takes control (new version).
     let refreshing = false;

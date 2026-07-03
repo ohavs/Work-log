@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   goalHours: 0,
   theme: 'light',
   palette: 'teal',
+  jobs: [], // [{ id, name, rate }]
 };
 
 class Store {

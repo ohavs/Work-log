@@ -502,3 +502,21 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .fieldset { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; }
 .fieldset-title { font-size: 13px; font-weight: 800; color: var(--primary); }
 .input-wrap .input-suffix { padding-inline-end: 14px; font-size: 16px; font-weight: 700; color: var(--muted-fg); }
+
+/* ============================================================
+   Multiple workplaces / jobs
+   ============================================================ */
+.job-filter { display: flex; gap: 8px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 2px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.job-filter::-webkit-scrollbar { display: none; }
+.job-filter button { flex: 0 0 auto; padding: 8px 15px; border-radius: 999px; background: var(--surface); box-shadow: var(--shadow-sm); font-size: 13px; font-weight: 700; color: var(--muted-fg); white-space: nowrap; transition: background .2s, color .2s; }
+.job-filter button.on { background: var(--primary); color: var(--on-primary); box-shadow: none; }
+
+.jobs-list { display: flex; flex-direction: column; gap: 8px; }
+.job-row { display: flex; align-items: center; gap: 10px; background: var(--surface-2); border-radius: 12px; padding: 13px 14px; cursor: pointer; transition: transform .12s; }
+.job-row:active { transform: scale(.98); }
+.job-row .jn { font-weight: 700; }
+.job-row .jr { margin-inline-start: auto; color: var(--muted-fg); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 13px; }
+.job-row .jedit { color: var(--muted-fg); display: grid; place-items: center; }
+.job-row .jedit svg { width: 18px; height: 18px; }
+.jobs-empty { font-size: 13px; color: var(--muted-fg); text-align: center; padding: 6px 4px 10px; line-height: 1.5; }
+.entry-job { display: inline-flex; align-items: center; font-weight: 700; color: var(--primary); }
