@@ -8,9 +8,10 @@
 
 export const firebaseConfig = {
   apiKey: "AIzaSyB9ixjOMN-oyVPI47bSog8oLW-uThyoGjM",
-  // Default handler domain — the one authorized in the Google OAuth client.
-  // (The service worker bypasses /__/ so it no longer breaks the auth iframe.)
-  authDomain: "work-ccd39.firebaseapp.com",
+  // Same-origin as the app (Firebase Hosting) so Google sign-in avoids
+  // cross-domain storage issues. Requires the matching redirect URI
+  // https://work-ccd39.web.app/__/auth/handler in the OAuth client.
+  authDomain: "work-ccd39.web.app",
   projectId: "work-ccd39",
   storageBucket: "work-ccd39.firebasestorage.app",
   messagingSenderId: "116225436709",
