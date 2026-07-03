@@ -174,8 +174,13 @@ svg { display: block; }
 .day-head .dow { color: var(--primary); }
 .day-head .dtotal { margin-inline-start: auto; font-weight: 700; }
 
-.entry { display: flex; align-items: center; gap: 14px; background: var(--surface); border-radius: var(--radius-sm); padding: 16px; box-shadow: var(--shadow-sm); transition: transform .15s; cursor: pointer; }
-.entry:active { transform: scale(.985); }
+.swipe-wrap { position: relative; overflow: hidden; border-radius: var(--radius-sm); }
+.swipe-del { position: absolute; top: 0; bottom: 0; left: 0; width: 76px; display: grid; place-items: center; background: var(--danger); color: #fff; border: none; cursor: pointer; }
+.swipe-del svg { width: 22px; height: 22px; }
+.swipe-del:active { filter: brightness(.92); }
+.entry { display: flex; align-items: center; gap: 14px; background: var(--surface); border-radius: var(--radius-sm); padding: 16px; box-shadow: var(--shadow-sm); cursor: pointer; }
+.swipe-wrap .entry { position: relative; transition: transform .22s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; }
+.swipe-wrap.open .entry { transform: translateX(76px); }
 .entry.flash { animation: flash 1.6s ease; }
 @keyframes flash { 0%,25% { box-shadow: 0 0 0 3px var(--primary); } 100% { box-shadow: var(--shadow-sm); } }
 .entry-time { display: flex; flex-direction: column; align-items: center; min-width: 60px; padding-inline-end: 14px; border-inline-end: 2px solid var(--border); }

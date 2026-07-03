@@ -62,6 +62,14 @@ function applyTheme() {
   const meta = document.querySelector('meta[name="theme-color"]');
   const p = PALETTES[store.settings.palette] || PALETTES.teal;
   if (meta) meta.content = dark ? '#0f1620' : p[0];
+  const tt = $('themeToggle');
+  if (tt) { tt.innerHTML = svg(dark ? 'sun' : 'moon'); tt.setAttribute('aria-label', dark ? 'מעבר למצב בהיר' : 'מעבר למצב כהה'); }
+}
+function toggleTheme() {
+  const dark = store.settings.theme !== 'dark';
+  store.saveSettings({ theme: dark ? 'dark' : 'light' });
+  applyTheme();
+  const chk = $('sDark'); if (chk) chk.checked = dark; // keep settings switch in sync if open
 }
 
 // ------------------------------------------------------------------ active session
@@ -215,6 +223,8 @@ function renderEntries(entries) {
     group.className = 'day-group';
     group.innerHTML = `<div class="day-head"><span class="dow">יום ${DOW[d.getDay()]}</span><span>${d.getDate()} ב${MONTHS[d.getMonth()]}</span>${dayMin > 0 ? `<span class="dtotal">${fmtHours(dayMin)} שעות</span>` : ''}</div>`;
     list.forEach((e) => {
+      const sw = document.createElement('div'); sw.className = 'swipe-wrap'; sw.dataset.id = e.id;
+      const del = document.createElement('button'); del.className = 'swipe-del'; del.type = 'button'; del.setAttribute('aria-label', 'מחיקה'); del.innerHTML = svg('trash');
       const card = document.createElement('div'); card.dataset.id = e.id;
       const t = entryType(e);
       const jn = e.jobId ? jobName(e.jobId) : '';
@@ -231,7 +241,8 @@ function renderEntries(entries) {
         card.className = 'entry';
         card.innerHTML = `<div class="entry-time"><span class="big">${fmtHours(mins)}</span><span class="unit">שעות</span></div><div class="entry-main"><span class="entry-range">${e.start} – ${e.end}</span><span class="entry-meta">${meta.join(' · ') || '&nbsp;'}</span></div>${r ? `<span class="entry-pay">${fmtMoney(pay, store.settings.currency)}</span>` : `<span class="entry-edit">${svg('pencil')}</span>`}`;
       }
-      group.appendChild(card);
+      sw.appendChild(del); sw.appendChild(card);
+      group.appendChild(sw);
     });
     wrap.appendChild(group);
   }
@@ -355,6 +366,55 @@ async function deleteCurrentEntry() {
   formSnapshot = serializeForm();
   closeSheet($('entrySheet'));
   toast('הרישום נמחק');
+}
+
+async function deleteEntryById(id) {
+  const ok = await showConfirm({ title: 'למחוק את הרישום?', message: 'לא ניתן לשחזר לאחר המחיקה.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
+  if (!ok) { closeSwipe(); return; }
+  store.deleteEntry(id);
+  toast('הרישום נמחק');
+}
+
+// ------------------------------------------------------------------ swipe-to-delete
+// Slide a shift card sideways to reveal a red trash action on its left (RTL).
+function closeSwipe(except) {
+  document.querySelectorAll('.swipe-wrap.open').forEach((w) => { if (w !== except) { w.classList.remove('open'); const c = w.querySelector('.entry'); if (c) c.style.transform = ''; } });
+}
+const SWIPE_W = 76; // width of the revealed delete button
+let swipe = null;   // active drag state
+let swipeSuppressUntil = 0; // ignore the click that trails a real swipe
+function onSwipeStart(ev) {
+  const sw = ev.target.closest('.swipe-wrap');
+  if (!sw || ev.target.closest('.swipe-del')) return;
+  const t = ev.touches[0];
+  swipe = { sw, card: sw.querySelector('.entry'), x0: t.clientX, y0: t.clientY, base: sw.classList.contains('open') ? SWIPE_W : 0, dx: 0, moved: false, axis: null };
+}
+function onSwipeMove(ev) {
+  if (!swipe) return;
+  const t = ev.touches[0];
+  const dx = t.clientX - swipe.x0, dy = t.clientY - swipe.y0;
+  if (!swipe.axis) { // lock the gesture axis on first meaningful movement
+    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+    swipe.axis = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+    if (swipe.axis === 'x') closeSwipe(swipe.sw);
+  }
+  if (swipe.axis !== 'x') return;
+  ev.preventDefault(); // we own the horizontal gesture; stop vertical scroll
+  swipe.moved = true;
+  const t2 = Math.max(0, Math.min(SWIPE_W, swipe.base + dx)); // reveal only toward the left
+  swipe.card.style.transition = 'none';
+  swipe.card.style.transform = `translateX(${t2}px)`;
+  swipe.dx = t2;
+}
+function onSwipeEnd() {
+  if (!swipe) return;
+  const s = swipe; swipe = null;
+  if (!s.moved) return;
+  s.card.style.transition = '';
+  const open = s.dx > SWIPE_W / 2;
+  s.card.style.transform = '';
+  s.sw.classList.toggle('open', open);
+  swipeSuppressUntil = Date.now() + 400;
 }
 
 // ------------------------------------------------------------------ settings
@@ -763,6 +823,7 @@ function bind() {
   $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
 
   $('settingsBtn').onclick = openSettings;
+  $('themeToggle').onclick = toggleTheme;
   $('closeSettings').onclick = () => closeSheet($('settingsSheet'));
   $('settingsForm').onsubmit = submitSettings;
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
@@ -778,7 +839,20 @@ function bind() {
   $('doExportPdf').onclick = runExportPdf;
   $('doExportCsv').onclick = runExportCsv;
 
-  $('entries').addEventListener('click', (e) => { const card = e.target.closest('.entry'); if (card) openEntry(card.dataset.id); });
+  const entriesEl = $('entries');
+  entriesEl.addEventListener('click', (e) => {
+    const delBtn = e.target.closest('.swipe-del');
+    if (delBtn) { const sw = delBtn.closest('.swipe-wrap'); if (sw) deleteEntryById(sw.dataset.id); return; }
+    if (Date.now() < swipeSuppressUntil) return;      // trailing click after a swipe
+    const openWrap = e.target.closest('.swipe-wrap.open');
+    if (openWrap) { closeSwipe(); return; }           // first tap just closes the revealed action
+    const card = e.target.closest('.entry');
+    if (card) openEntry(card.dataset.id);
+  });
+  entriesEl.addEventListener('touchstart', onSwipeStart, { passive: true });
+  entriesEl.addEventListener('touchmove', onSwipeMove, { passive: false });
+  entriesEl.addEventListener('touchend', onSwipeEnd);
+  entriesEl.addEventListener('touchcancel', onSwipeEnd);
 
   // backdrop taps: entry sheet uses unsaved guard; others close directly
   $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
