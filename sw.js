@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v19';
+const CACHE = 'worklog-v20';
 const SHELL = [
   './',
   './index.html',
@@ -20,7 +20,13 @@ const SHELL = [
 ];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Fetch the shell with cache:'reload' so we never bake a stale HTTP-cached
+  // copy into a fresh cache version.
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => Promise.all(SHELL.map((u) => fetch(new Request(u, { cache: 'reload' })).then((r) => c.put(u, r)).catch(() => {}))))
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
@@ -43,8 +49,10 @@ self.addEventListener('fetch', (e) => {
   // Same-origin app shell: NETWORK-FIRST so updates show up immediately when
   // online; fall back to cache (then index.html) only when offline.
   if (url.origin === location.origin) {
+    // network-first, bypassing the HTTP cache entirely so a new deploy always
+    // wins; fall back to the Cache API (then index.html) only when offline.
     e.respondWith(
-      fetch(req).then((res) => {
+      fetch(new Request(req.url, { cache: 'no-store' })).then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
         return res;
