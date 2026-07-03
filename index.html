@@ -90,13 +90,17 @@
       </div>
     </section>
 
-    <!-- ============ MORE view (placeholder — content TBD) ============ -->
+    <!-- ============ MORE view — payslip, pension, benefits, insights ============ -->
     <section class="view" id="viewMore" hidden>
-      <div class="soon">
-        <div class="soon-icon" data-ic="grid"></div>
-        <h2>בקרוב</h2>
-        <p>הדף הזה בבנייה — בחרנו ביחד מה יהיה כאן (פנסיה, נסיעות, ימי חופשה שנצברו ועוד).</p>
+      <div class="reports-bar">
+        <div class="month-nav">
+          <button class="nav-arrow" id="moPrev" aria-label="החודש הקודם"></button>
+          <button class="month-label" id="moLabel"><span id="moMonthName">—</span></button>
+          <button class="nav-arrow" id="moNext" aria-label="החודש הבא"></button>
+        </div>
+        <button class="chip-btn" id="payrollBtn" aria-label="הגדרות שכר ומיסים"><span data-ic="settings"></span></button>
       </div>
+      <div id="moreCards"></div>
     </section>
   </main>
 
@@ -224,6 +228,54 @@
         <div class="sync-box">
           <div class="sync-status" id="syncStatus">מצב שמירה: מקומי במכשיר</div>
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
+        </div>
+
+        <button type="submit" class="btn accent big">שמירה</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Payroll settings sheet ============ -->
+  <div class="sheet-backdrop" id="payrollSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="payTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <span class="ghost-spacer"></span>
+        <h3 id="payTitle">הגדרות שכר ומיסים</h3>
+        <button class="text-btn" id="closePayroll">סגירה</button>
+      </div>
+      <form id="payrollForm" class="form" autocomplete="off">
+        <p class="form-note">כל הערכים אחוזים או סכומים שאפשר לשנות. החישובים הם הערכה בלבד.</p>
+
+        <label class="switch-field">
+          <span>חישוב שעות נוספות (125% / 150%)</span>
+          <span class="switch"><input type="checkbox" id="pOvertime" /><span class="knob"></span></span>
+        </label>
+
+        <div class="fieldset">
+          <div class="fieldset-title">ניכויים משכר (%)</div>
+          <div class="time-grid">
+            <div class="field"><span class="field-label">מס הכנסה</span><div class="input-wrap"><input type="number" id="pIncomeTax" min="0" max="60" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">ביטוח לאומי + בריאות</span><div class="input-wrap"><input type="number" id="pSocialHealth" min="0" max="20" step="0.1" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+          </div>
+        </div>
+
+        <div class="fieldset">
+          <div class="fieldset-title">פנסיה (%)</div>
+          <div class="time-grid">
+            <div class="field"><span class="field-label">הפרשת עובד</span><div class="input-wrap"><input type="number" id="pPensionEmp" min="0" max="12" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">הפרשת מעסיק</span><div class="input-wrap"><input type="number" id="pPensionEr" min="0" max="12" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+          </div>
+          <div class="field"><span class="field-label">פיצויים (מעסיק)</span><div class="input-wrap"><input type="number" id="pSeverance" min="0" max="12" step="0.01" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+        </div>
+
+        <div class="fieldset">
+          <div class="fieldset-title">זכויות</div>
+          <div class="time-grid">
+            <div class="field"><span class="field-label">ימי חופשה בשנה</span><input type="number" id="pVacDays" min="0" max="40" step="1" inputmode="numeric" /></div>
+            <div class="field"><span class="field-label">ימי הבראה בשנה</span><input type="number" id="pRecDays" min="0" max="20" step="1" inputmode="numeric" /></div>
+          </div>
+          <div class="field"><span class="field-label">מחיר יום הבראה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pRecRate" min="0" step="1" inputmode="numeric" /></div></div>
         </div>
 
         <button type="submit" class="btn accent big">שמירה</button>

@@ -42,5 +42,7 @@ export function initIcons() {
   set('moreChev', 'chevDown');
   set('dpPrev', 'chevRight');
   set('dpNext', 'chevLeft');
+  set('moPrev', 'chevRight');
+  set('moNext', 'chevLeft');
   set('emptyIcon', 'emptyCal');
 }

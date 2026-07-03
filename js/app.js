@@ -4,6 +4,10 @@ import { exportCSV } from './csv.js';
 import { initIcons, svg } from './icons.js';
 import { initPickers, openTimePicker, openDatePicker, showConfirm } from './pickers.js';
 import {
+  DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
+  yearlyByMonth, averages, vacationBalance, recreationAnnual,
+} from './finance.js';
+import {
   MONTHS, DOW, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
   entryType, isWork, weekStartISO, weekLabel,
@@ -121,12 +125,16 @@ function openStartEdit() {
 }
 
 // ------------------------------------------------------------------ month + stats
-function renderMonth() { $('monthName').textContent = `${MONTHS[viewMonth]} ${viewYear}`; }
+function renderMonth() {
+  const t = `${MONTHS[viewMonth]} ${viewYear}`;
+  $('monthName').textContent = t;
+  const mo = $('moMonthName'); if (mo) mo.textContent = t;
+}
 function shiftMonth(delta) {
   viewMonth += delta;
   if (viewMonth < 0) { viewMonth = 11; viewYear--; }
   if (viewMonth > 11) { viewMonth = 0; viewYear++; }
-  renderMonth(); renderAll();
+  renderMonth(); renderAll(); renderMore();
 }
 function monthEntries() { return store.entries.filter((e) => inMonth(e, viewYear, viewMonth)).sort((a, b) => b.date.localeCompare(a.date) || (b.start || '').localeCompare(a.start || '')); }
 function effRate(e) { return e.rate != null && e.rate !== '' ? Number(e.rate) : (Number(store.settings.rate) || 0); }
@@ -400,10 +408,157 @@ function toast(msg) {
   toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => { t.hidden = true; }, 250); }, 2600);
 }
 
+// ------------------------------------------------------------------ "עוד" page
+function hoursLbl(dec) { return fmtHours(Math.round(dec * 60)); }
+function money(n) { return fmtMoney(n, '₪'); }
+
+function renderMore() {
+  const box = $('moreCards');
+  if (!box) return;
+  const entries = store.entries, s = store.settings;
+  const p = payrollOf(s);
+  const ps = payslip(entries, s, viewYear, viewMonth);
+  const hasData = ps.gross > 0;
+
+  // --- payslip card ---
+  let html = `
+  <div class="fcard">
+    <div class="fcard-head"><span class="fic">${svg('csv')}</span><span class="fcard-title">תלוש נטו משוער</span><span class="fcard-sub">${MONTHS[viewMonth]}</span></div>
+    ${hasData ? `
+      <div class="fbig primary">${money(ps.net)}</div>
+      <div class="fbig-label">נטו להערכה · ${hoursLbl(ps.hours)} שעות</div>
+      <div class="frows">
+        <div class="frow"><span class="fk">ברוטו</span><span class="fv">${money(ps.gross)}</span></div>
+        ${ps.incomeTax ? `<div class="frow minus"><span class="fk">מס הכנסה (${p.incomeTax}%)</span><span class="fv">−${money(ps.incomeTax)}</span></div>` : ''}
+        ${ps.socialHealth ? `<div class="frow minus"><span class="fk">ביטוח לאומי + בריאות (${p.socialHealth}%)</span><span class="fv">−${money(ps.socialHealth)}</span></div>` : ''}
+        ${ps.pension ? `<div class="frow minus"><span class="fk">פנסיה עובד (${p.pensionEmployee}%)</span><span class="fv">−${money(ps.pension)}</span></div>` : ''}
+        <div class="frow total"><span class="fk">נטו</span><span class="fv">${money(ps.net)}</span></div>
+      </div>` : `<div class="hint-row">אין שעות עבודה בחודש זה. הגדירו שכר לשעה כדי לראות הערכה.</div>`}
+  </div>`;
+
+  // --- pension card ---
+  if (hasData) {
+    const pen = pensionForMonth(entries, s, viewYear, viewMonth);
+    html += `
+    <div class="fcard">
+      <div class="fcard-head"><span class="fic">${svg('chart')}</span><span class="fcard-title">פנסיה — נצבר החודש</span></div>
+      <div class="fbig primary">${money(pen.total)}</div>
+      <div class="frows">
+        <div class="frow"><span class="fk">הפרשת עובד (${p.pensionEmployee}%)</span><span class="fv">${money(pen.employee)}</span></div>
+        <div class="frow"><span class="fk">הפרשת מעסיק (${p.pensionEmployer}%)</span><span class="fv">${money(pen.employer)}</span></div>
+        <div class="frow"><span class="fk">פיצויים (${p.severance}%)</span><span class="fv">${money(pen.severance)}</span></div>
+      </div>
+    </div>`;
+  }
+
+  // --- overtime card ---
+  if (p.overtime && hasData) {
+    const otg = grossForMonth(entries, s, viewYear, viewMonth);
+    const flat = grossForMonth(entries, { ...s, payroll: { ...p, overtime: false } }, viewYear, viewMonth);
+    const extra = otg.gross - flat.gross;
+    html += `
+    <div class="fcard">
+      <div class="fcard-head accent"><span class="fic">${svg('clock')}</span><span class="fcard-title">שעות נוספות</span></div>
+      <div class="fgrid">
+        <div class="fg"><b>${hoursLbl(otg.ot125)}</b><span>ב‑125%</span></div>
+        <div class="fg"><b>${hoursLbl(otg.ot150)}</b><span>ב‑150%</span></div>
+        <div class="fg"><b class="">${money(extra)}</b><span>תוספת שכר</span></div>
+      </div>
+    </div>`;
+  } else if (!p.overtime) {
+    html += `<div class="fcard"><div class="fcard-head accent"><span class="fic">${svg('clock')}</span><span class="fcard-title">שעות נוספות</span></div><div class="hint-row">הפעילו חישוב שעות נוספות (125%/150%) ב‑⚙ הגדרות שכר.</div></div>`;
+  }
+
+  // --- yearly chart ---
+  const yr = yearlyByMonth(entries, s, viewYear);
+  const maxH = Math.max(1, ...yr.map((r) => r.hours));
+  const totalH = yr.reduce((a, r) => a + r.hours, 0);
+  const totalG = yr.reduce((a, r) => a + r.gross, 0);
+  html += `
+  <div class="fcard">
+    <div class="fcard-head"><span class="fic">${svg('chart')}</span><span class="fcard-title">סיכום שנתי</span>
+      <span class="year-switch fcard-sub" style="margin-inline-start:auto"><button data-yr="-1" aria-label="שנה קודמת">${svg('chevRight')}</button><b>${viewYear}</b><button data-yr="1" aria-label="שנה הבאה">${svg('chevLeft')}</button></span>
+    </div>
+    <svg class="ychart-svg" viewBox="0 0 120 100" preserveAspectRatio="none" aria-hidden="true">
+      ${yr.map((r, i) => { const bh = Math.max(2, (r.hours / maxH) * 100); const cls = r.month === viewMonth ? 'sbar cur' : (r.hours === 0 ? 'sbar empty' : 'sbar'); return `<rect class="${cls}" x="${i * 10 + 2}" y="${(100 - bh).toFixed(1)}" width="6" height="${bh.toFixed(1)}" rx="1.4"><title>${r.label}: ${hoursLbl(r.hours)}</title></rect>`; }).join('')}
+    </svg>
+    <div class="ychart-labels">${yr.map((r) => `<span>${r.label.slice(0, 3)}</span>`).join('')}</div>
+    <div class="ychart-foot"><span class="fbig-label">סה״כ ${hoursLbl(totalH)} שעות</span><span class="fbig-label">${money(totalG)}</span></div>
+  </div>`;
+
+  // --- averages ---
+  const av = averages(entries, s, viewYear, viewMonth);
+  html += `
+  <div class="fcard">
+    <div class="fcard-head"><span class="fic">${svg('chart')}</span><span class="fcard-title">ממוצעים</span><span class="fcard-sub">${MONTHS[viewMonth]}</span></div>
+    <div class="fgrid">
+      <div class="fg"><b>${hoursLbl(av.avgDay)}</b><span>ממוצע ליום</span></div>
+      <div class="fg"><b>${hoursLbl(av.avgWeek)}</b><span>ממוצע לשבוע</span></div>
+      <div class="fg"><b>${av.busiestDow >= 0 ? DOW[av.busiestDow] : '—'}</b><span>היום העמוס</span></div>
+    </div>
+  </div>`;
+
+  // --- vacation balance ---
+  const vb = vacationBalance(entries, s, viewYear);
+  const vpct = vb.entitled ? Math.min(100, (vb.used / vb.entitled) * 100) : 0;
+  html += `
+  <div class="fcard">
+    <div class="fcard-head accent"><span class="fic">${svg('vacation')}</span><span class="fcard-title">חופשה ${viewYear}</span><span class="fcard-sub">${vb.sick} ימי מחלה</span></div>
+    <div class="vac-track"><div class="vac-fill" style="width:${vpct}%"></div></div>
+    <div class="frow" style="border:none;padding-top:2px"><span class="fk">נוצלו ${vb.used} מתוך ${vb.entitled}</span><span class="fv">נותרו ${vb.remaining} ימים</span></div>
+  </div>`;
+
+  // --- recreation ---
+  const rc = recreationAnnual(s);
+  html += `
+  <div class="fcard">
+    <div class="fcard-head"><span class="fic">${svg('vacation')}</span><span class="fcard-title">דמי הבראה (שנתי)</span></div>
+    <div class="fbig accent">${money(rc.total)}</div>
+    <div class="fbig-label">${rc.days} ימים × ${money(rc.rate)}</div>
+  </div>`;
+
+  box.innerHTML = html;
+}
+
+// ------------------------------------------------------------------ payroll settings
+function openPayroll() {
+  const p = payrollOf(store.settings);
+  $('pOvertime').checked = !!p.overtime;
+  $('pIncomeTax').value = p.incomeTax;
+  $('pSocialHealth').value = p.socialHealth;
+  $('pPensionEmp').value = p.pensionEmployee;
+  $('pPensionEr').value = p.pensionEmployer;
+  $('pSeverance').value = p.severance;
+  $('pVacDays').value = p.annualVacationDays;
+  $('pRecDays').value = p.recreationDays;
+  $('pRecRate').value = p.recreationDayRate;
+  openSheet($('payrollSheet'));
+}
+function submitPayroll(ev) {
+  ev.preventDefault();
+  const num = (id, def) => { const v = Number($(id).value); return Number.isFinite(v) ? v : def; };
+  store.saveSettings({ payroll: {
+    overtime: $('pOvertime').checked,
+    otThreshold: DEFAULT_PAYROLL.otThreshold,
+    incomeTax: num('pIncomeTax', 0),
+    socialHealth: num('pSocialHealth', 0),
+    pensionEmployee: num('pPensionEmp', 0),
+    pensionEmployer: num('pPensionEr', 0),
+    severance: num('pSeverance', 0),
+    annualVacationDays: num('pVacDays', 0),
+    recreationDays: num('pRecDays', 0),
+    recreationDayRate: num('pRecRate', 0),
+  } });
+  closeSheet($('payrollSheet'));
+  renderMore();
+  toast('הגדרות השכר נשמרו');
+}
+
 // ------------------------------------------------------------------ tabs
 function switchView(id) {
   ['viewHome', 'viewReports', 'viewMore'].forEach((v) => { $(v).hidden = v !== id; });
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('on', b.dataset.view === id));
+  if (id === 'viewMore') renderMore();
   window.scrollTo(0, 0);
 }
 
@@ -424,6 +579,22 @@ function bind() {
   // bottom-nav tabs
   document.getElementById('bottomNav').addEventListener('click', (e) => {
     const b = e.target.closest('.nav-item[data-view]'); if (b) switchView(b.dataset.view);
+  });
+
+  // "עוד" page: month nav, payroll settings, year switch
+  $('moPrev').onclick = () => shiftMonth(-1);
+  $('moNext').onclick = () => shiftMonth(1);
+  $('moLabel').onclick = () => openDatePicker({
+    title: 'מעבר לחודש',
+    valueISO: `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`,
+    onConfirm: (iso) => { const d = parseDate(iso); viewYear = d.getFullYear(); viewMonth = d.getMonth(); renderMonth(); renderAll(); renderMore(); },
+  });
+  $('payrollBtn').onclick = openPayroll;
+  $('closePayroll').onclick = () => closeSheet($('payrollSheet'));
+  $('payrollForm').onsubmit = submitPayroll;
+  $('moreCards').addEventListener('click', (e) => {
+    const y = e.target.closest('button[data-yr]');
+    if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); }
   });
 
   $('addBtn').onclick = () => openEntry(null);
@@ -459,7 +630,7 @@ function bind() {
 
   // backdrop taps: entry sheet uses unsaved guard; others close directly
   $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
-  ['settingsSheet', 'exportSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+  ['settingsSheet', 'exportSheet', 'payrollSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
@@ -468,7 +639,7 @@ async function main() {
   initIcons();
   initPickers();
   bind();
-  store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderSyncStatus(); updateAccountUI(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderAll(); renderMore(); renderSyncStatus(); updateAccountUI(); });
   await store.init();
   applyTheme(); renderMonth(); renderHero(); renderAll(); updateAccountUI();
   if ('serviceWorker' in navigator) {

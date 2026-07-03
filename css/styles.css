@@ -442,3 +442,63 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .soon-icon svg { width: 36px; height: 36px; }
 .soon h2 { font-size: 24px; margin-bottom: 8px; color: var(--fg); }
 .soon p { max-width: 300px; margin: 0 auto; font-size: 15px; line-height: 1.6; }
+
+/* ============================================================
+   "עוד" page — payslip, pension, benefits, insights
+   ============================================================ */
+#moreCards { display: flex; flex-direction: column; gap: 12px; }
+
+.fcard { background: var(--surface); border-radius: var(--radius-sm); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+.fcard-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.fcard-head .fic { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: var(--primary-soft); color: var(--primary); flex-shrink: 0; }
+.fcard-head.accent .fic { background: var(--accent-soft); color: var(--accent); }
+.fcard-head .fic svg { width: 19px; height: 19px; }
+.fcard-title { font-size: 15px; font-weight: 800; }
+.fcard-sub { font-size: 12px; color: var(--muted-fg); margin-inline-start: auto; font-weight: 600; }
+
+.fbig { font-size: 30px; font-weight: 900; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.fbig.primary { color: var(--primary); }
+.fbig.accent { color: var(--accent); }
+.fbig-label { font-size: 12px; color: var(--muted-fg); font-weight: 600; margin-top: 2px; }
+
+.frows { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.frow { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 14px; border-top: 1px solid var(--border); font-variant-numeric: tabular-nums; }
+.frow:first-child { border-top: none; }
+.frow .fk { color: var(--muted-fg); font-weight: 600; }
+.frow .fv { font-weight: 700; }
+.frow.minus .fv { color: var(--danger); }
+.frow.total { border-top: 2px solid var(--border); margin-top: 4px; padding-top: 12px; font-size: 16px; }
+.frow.total .fk { color: var(--fg); font-weight: 800; }
+.frow.total .fv { font-weight: 900; color: var(--primary); }
+
+/* mini grid of stats inside a card */
+.fgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.fgrid .fg { text-align: center; }
+.fgrid .fg b { display: block; font-size: 20px; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.fgrid .fg span { font-size: 11px; color: var(--muted-fg); font-weight: 600; }
+
+/* yearly bar chart */
+.ychart-svg { display: block; width: 100%; height: 104px; margin-top: 8px; overflow: visible; }
+.ychart-svg .sbar { fill: var(--primary); transition: y .4s cubic-bezier(.4,0,.2,1), height .4s cubic-bezier(.4,0,.2,1); }
+.ychart-svg .sbar.empty { fill: var(--surface-2); }
+.ychart-svg .sbar.cur { fill: var(--accent); }
+.ychart-labels { display: flex; margin-top: 5px; }
+.ychart-labels span { flex: 1; text-align: center; font-size: 9px; color: var(--muted-fg); font-weight: 700; }
+.ychart-foot { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
+.year-switch { display: flex; align-items: center; gap: 6px; }
+.year-switch button { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted-fg); }
+.year-switch button:active { background: var(--surface-2); }
+.year-switch button svg { width: 18px; height: 18px; }
+.year-switch b { font-size: 15px; font-weight: 800; min-width: 48px; text-align: center; }
+
+/* vacation bar */
+.vac-track { height: 12px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 10px 0 6px; }
+.vac-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
+
+.hint-row { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 11px; padding: 11px 14px; margin-top: 10px; text-align: center; }
+
+/* payroll form extras */
+.form-note { font-size: 13px; color: var(--muted-fg); margin: -4px 0 0; line-height: 1.5; }
+.fieldset { display: flex; flex-direction: column; gap: 12px; padding: 14px; border: 1px solid var(--border); border-radius: 14px; }
+.fieldset-title { font-size: 13px; font-weight: 800; color: var(--primary); }
+.input-wrap .input-suffix { padding-inline-end: 14px; font-size: 16px; font-weight: 700; color: var(--muted-fg); }
