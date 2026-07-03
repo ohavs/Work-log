@@ -183,14 +183,37 @@ function renderStats(entries) {
   if (sick.size) parts.push(`<span class="off-pill sick">${svg('sick')}<b>${sick.size}</b> מחלה</span>`);
   $('offPills').innerHTML = parts.join(''); $('offPills').hidden = parts.length === 0;
 
-  const goal = Number(store.settings.goalHours) || 0;
-  const gc = $('goalCard');
-  if (goal > 0) {
-    gc.hidden = false;
-    const pct = Math.min(100, (totalMin / 60 / goal) * 100);
-    const fill = $('goalFill'); fill.style.width = pct + '%'; fill.classList.toggle('done', pct >= 100);
-    $('goalNums').textContent = `${fmtHours(totalMin)} / ${goal} שעות`;
-  } else gc.hidden = true;
+  // goal progress rings (weekly + monthly)
+  const goalM = Number(store.settings.goalHours) || 0;
+  const goalW = Number(store.settings.goalWeekHours) || 0;
+  const rings = [];
+  if (goalW > 0) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`)); }
+  if (goalM > 0) { rings.push(ringSVG((totalMin / 60 / goalM) * 100, 'החודש', `${fmtHours(totalMin)} / ${goalM}`)); }
+  const gr = $('goalRings');
+  gr.innerHTML = rings.join('');
+  gr.hidden = rings.length === 0;
+  gr.classList.toggle('single', rings.length === 1);
+}
+
+function currentWeekMinutes() {
+  const wk = weekStartISO(new Date());
+  return jobFilteredEntries().reduce((s, e) => (isWork(e) && weekStartISO(parseDate(e.date)) === wk ? s + workedMinutes(e) : s), 0);
+}
+// A modern progress donut. pct is 0..∞ (clamped for the arc; shown rounded).
+function ringSVG(pctRaw, label, sub) {
+  const pct = Math.max(0, Math.min(100, pctRaw));
+  const done = pctRaw >= 100;
+  const r = 42, C = 2 * Math.PI * r;
+  const off = C * (1 - pct / 100);
+  return `<div class="ring-wrap${done ? ' done' : ''}">
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="ring-bg" cx="50" cy="50" r="${r}"></circle>
+      <circle class="ring-fg" cx="50" cy="50" r="${r}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" stroke-linecap="round"></circle>
+      <text class="ring-pct" x="50" y="52" text-anchor="middle" dominant-baseline="central">${Math.round(pctRaw)}%</text>
+    </svg>
+    <span class="ring-label">${label}</span>
+    <span class="ring-sub">${sub} ש׳</span>
+  </div>`;
 }
 
 function renderWeekly(entries) {
@@ -489,6 +512,7 @@ function openSettings() {
   $('sName').value = s.name || '';
   $('sRate').value = s.rate || 0;
   $('sGoal').value = s.goalHours || 0;
+  $('sGoalWeek').value = s.goalWeekHours || 0;
   $('sDark').checked = s.theme === 'dark';
   reminderPick = s.reminderTime || '18:00';
   $('sReminder').checked = !!s.reminder;
@@ -600,7 +624,8 @@ function updateAccountUI() {
 function submitSettings(ev) {
   ev.preventDefault();
   store.saveSettings({
-    name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, goalHours: Number($('sGoal').value) || 0,
+    name: $('sName').value.trim(), rate: Number($('sRate').value) || 0,
+    goalHours: Number($('sGoal').value) || 0, goalWeekHours: Number($('sGoalWeek').value) || 0,
     theme: $('sDark').checked ? 'dark' : 'light',
     reminder: $('sReminder').checked, reminderTime: reminderPick,
   });

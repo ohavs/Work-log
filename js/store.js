@@ -9,7 +9,8 @@ export const DEFAULT_SETTINGS = {
   name: '',
   rate: 0,
   currency: '₪',
-  goalHours: 0,
+  goalHours: 0,       // יעד שעות חודשי
+  goalWeekHours: 0,   // יעד שעות שבועי
   theme: 'light',
   palette: 'teal',
   jobs: [], // [{ id, name, rate }]

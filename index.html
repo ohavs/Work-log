@@ -64,18 +64,15 @@
 
       <div class="job-filter" id="jobFilterR" hidden></div>
 
-      <div class="stats compact">
-        <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
-        <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
-        <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
-      </div>
-
-      <div class="off-pills" id="offPills" hidden></div>
-
-      <div class="goal" id="goalCard" hidden>
-        <div class="goal-head"><span class="goal-title">יעד חודשי</span><span class="goal-nums" id="goalNums"></span></div>
-        <div class="goal-track"><div class="goal-fill" id="goalFill"></div></div>
-      </div>
+      <section class="summary-card">
+        <div class="goal-rings" id="goalRings" hidden></div>
+        <div class="stat-row">
+          <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
+          <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
+          <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
+        </div>
+        <div class="off-pills" id="offPills" hidden></div>
+      </section>
 
       <div class="weekly" id="weeklyCard" hidden>
         <button type="button" class="weekly-head" id="weeklyToggle" aria-expanded="false">
@@ -223,14 +220,15 @@
           <span class="field-label">השם שלי <em>(לדוח)</em></span>
           <input type="text" id="sName" maxlength="40" placeholder="לא חובה" />
         </div>
-        <div class="time-grid">
-          <div class="field">
-            <span class="field-label">שכר לשעה</span>
-            <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" /></div>
-          </div>
-          <div class="field">
-            <span class="field-label">יעד שעות חודשי</span>
-            <input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" />
+        <div class="field">
+          <span class="field-label">שכר לשעה</span>
+          <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" /></div>
+        </div>
+        <div class="field">
+          <span class="field-label">יעד שעות <em>(למד ההתקדמות בדוחות)</em></span>
+          <div class="time-grid">
+            <div class="input-wrap"><input type="number" id="sGoalWeek" min="0" step="1" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / שבוע</span></div>
+            <div class="input-wrap"><input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / חודש</span></div>
           </div>
         </div>
 
