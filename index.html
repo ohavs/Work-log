@@ -26,36 +26,38 @@
   <header class="topbar">
     <button class="icon-btn" id="settingsBtn" aria-label="הגדרות"></button>
     <div class="brand"><span class="brand-mark"></span><h1>שעות עבודה</h1></div>
-    <button class="icon-btn" id="exportBtn" aria-label="ייצוא"></button>
+    <span class="topbar-spacer"></span>
   </header>
 
   <main class="app">
-    <!-- ============ HERO — one-tap clock in / out ============ -->
-    <section class="hero" id="hero">
-      <p class="hero-date" id="heroDate"></p>
-
-      <div class="timer" id="timer" hidden>
-        <span class="timer-val" id="timerVal">00:00:00</span>
-        <button type="button" class="timer-start" id="editStart"></button>
+    <!-- ============ HOME view — one-tap clock in / out ============ -->
+    <section class="view" id="viewHome">
+      <div class="hero" id="hero">
+        <p class="hero-date" id="heroDate"></p>
+        <div class="timer" id="timer" hidden>
+          <span class="timer-val" id="timerVal">00:00:00</span>
+          <button type="button" class="timer-start" id="editStart"></button>
+        </div>
+        <button class="punch" id="punchBtn" aria-label="כניסה">
+          <span class="punch-ring"><span class="punch-inner" id="punchInner">כניסה</span></span>
+        </button>
+        <p class="hero-hint" id="heroHint">הקש כדי להתחיל — התאריך והשעה נקלטים לבד</p>
+        <p class="hero-today" id="heroToday" hidden></p>
       </div>
-
-      <button class="punch" id="punchBtn" aria-label="כניסה">
-        <span class="punch-ring"><span class="punch-inner" id="punchInner">כניסה</span></span>
-      </button>
-
-      <p class="hero-hint" id="heroHint">הקש כדי להתחיל — התאריך והשעה נקלטים לבד</p>
-      <p class="hero-today" id="heroToday" hidden></p>
     </section>
 
-    <!-- ============ History ============ -->
-    <section class="history">
-      <div class="month-nav">
-        <button class="nav-arrow" id="prevMonth" aria-label="החודש הקודם"></button>
-        <button class="month-label" id="monthLabel"><span id="monthName">—</span></button>
-        <button class="nav-arrow" id="nextMonth" aria-label="החודש הבא"></button>
+    <!-- ============ REPORTS view ============ -->
+    <section class="view" id="viewReports" hidden>
+      <div class="reports-bar">
+        <div class="month-nav">
+          <button class="nav-arrow" id="prevMonth" aria-label="החודש הקודם"></button>
+          <button class="month-label" id="monthLabel"><span id="monthName">—</span></button>
+          <button class="nav-arrow" id="nextMonth" aria-label="החודש הבא"></button>
+        </div>
+        <button class="chip-btn" id="exportBtn" aria-label="ייצוא"><span data-ic="export"></span></button>
       </div>
 
-      <div class="stats">
+      <div class="stats compact">
         <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
         <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
         <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
@@ -76,18 +78,34 @@
         <div class="weekly-body" id="weeklyBody" hidden></div>
       </div>
 
-      <div class="list-head"><h2>רישומים</h2><span class="list-count" id="listCount"></span></div>
+      <div class="list-head">
+        <h2>רישומים <span class="list-count" id="listCount"></span></h2>
+        <button class="add-inline" id="addBtn"><span data-ic="plus"></span> הוספה</button>
+      </div>
       <div class="entries" id="entries"></div>
-
       <div class="empty" id="emptyState" hidden>
         <div class="empty-icon" id="emptyIcon"></div>
         <p class="empty-title">אין רישומים לחודש הזה</p>
-        <p class="empty-sub">התחילו עם כפתור הכניסה למעלה, או הוסיפו ידנית עם +</p>
+        <p class="empty-sub">התחילו עם כפתור הכניסה, או הוסיפו ידנית עם +</p>
+      </div>
+    </section>
+
+    <!-- ============ MORE view (placeholder — content TBD) ============ -->
+    <section class="view" id="viewMore" hidden>
+      <div class="soon">
+        <div class="soon-icon" data-ic="grid"></div>
+        <h2>בקרוב</h2>
+        <p>הדף הזה בבנייה — בחרנו ביחד מה יהיה כאן (פנסיה, נסיעות, ימי חופשה שנצברו ועוד).</p>
       </div>
     </section>
   </main>
 
-  <button class="fab" id="addBtn" aria-label="הוספת רישום ידני"></button>
+  <!-- ============ Floating bottom nav ============ -->
+  <nav class="bottom-nav" id="bottomNav">
+    <button class="nav-item on" data-view="viewHome"><span class="nav-ic" data-ic="home"></span><span class="nav-label">בית</span></button>
+    <button class="nav-item" data-view="viewReports"><span class="nav-ic" data-ic="chart"></span><span class="nav-label">דוחות</span></button>
+    <button class="nav-item" data-view="viewMore"><span class="nav-ic" data-ic="grid"></span><span class="nav-label">עוד</span></button>
+  </nav>
 
   <!-- ============ Entry editor sheet ============ -->
   <div class="sheet-backdrop" id="entrySheet" hidden>
@@ -152,7 +170,7 @@
           <div class="field time-only">
             <span class="field-label">שכר לשעה</span>
             <div class="input-wrap">
-              <span class="input-prefix" id="rateCurr">₪</span>
+              <span class="input-prefix">₪</span>
               <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="לפי ההגדרות" />
             </div>
           </div>
@@ -172,12 +190,17 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <span class="text-btn ghost-spacer"></span>
+        <span class="ghost-spacer"></span>
         <h3 id="setTitle">הגדרות</h3>
         <button class="text-btn" id="closeSettings">סגירה</button>
       </div>
 
       <form id="settingsForm" class="form" autocomplete="off">
+        <div class="field">
+          <span class="field-label">ערכת צבעים</span>
+          <div class="palette-row" id="paletteRow"></div>
+        </div>
+
         <div class="field">
           <span class="field-label">השם שלי <em>(לדוח)</em></span>
           <input type="text" id="sName" maxlength="40" placeholder="לא חובה" />
@@ -185,22 +208,12 @@
         <div class="time-grid">
           <div class="field">
             <span class="field-label">שכר לשעה</span>
-            <input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" />
+            <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" /></div>
           </div>
           <div class="field">
-            <span class="field-label">מטבע</span>
-            <div class="chips wrap" id="currChips">
-              <button type="button" data-cur="₪">₪</button>
-              <button type="button" data-cur="$">$</button>
-              <button type="button" data-cur="€">€</button>
-              <button type="button" data-cur="£">£</button>
-            </div>
-            <input type="hidden" id="sCurrency" value="₪" />
+            <span class="field-label">יעד שעות חודשי</span>
+            <input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" />
           </div>
-        </div>
-        <div class="field">
-          <span class="field-label">יעד שעות חודשי <em>(0 = ללא)</em></span>
-          <input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" />
         </div>
 
         <label class="switch-field">
@@ -214,7 +227,6 @@
         </div>
 
         <button type="submit" class="btn accent big">שמירה</button>
-        <p class="version">גרסה 3.0 · עוצב עם UI-UX Pro Max</p>
       </form>
     </div>
   </div>
@@ -250,7 +262,7 @@
   <div class="sheet-backdrop" id="datePicker" hidden>
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3>בחירת תאריך</h3><button class="text-btn" id="dateCancel">ביטול</button></div>
+      <div class="sheet-head"><span class="ghost-spacer"></span><h3 id="datePickerTitle">בחירת תאריך</h3><button class="text-btn" id="dateCancel">ביטול</button></div>
       <div class="cal-nav">
         <button class="nav-arrow sm" id="dpPrev" aria-label="חודש קודם"></button>
         <span class="cal-title" id="dpTitle"></span>

@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = {
   currency: '₪',
   goalHours: 0,
   theme: 'light',
+  palette: 'teal',
 };
 
 class Store {

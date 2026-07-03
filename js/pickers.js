@@ -73,7 +73,8 @@ function renderCal() {
   grid.innerHTML = html;
 }
 
-export function openDatePicker({ valueISO, onConfirm }) {
+export function openDatePicker({ valueISO, onConfirm, title }) {
+  const t = $('datePickerTitle'); if (t) t.textContent = title || 'בחירת תאריך';
   const d = valueISO ? parseDate(valueISO) : new Date();
   dateState = { y: d.getFullYear(), m: d.getMonth(), selISO: valueISO || toISO(new Date()), onConfirm };
   renderCal();

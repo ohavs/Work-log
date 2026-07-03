@@ -25,11 +25,32 @@ let formSnapshot = '';
 
 const TYPE_LABEL = { work: 'עבודה', vacation: 'חופשה', sick: 'מחלה' };
 
-// ------------------------------------------------------------------ theme
+// palette id -> [primary, primary-2, accent, accent-2]
+const PALETTES = {
+  teal:    ['#0D9488', '#14B8A6', '#EA580C', '#F97316'],
+  indigo:  ['#4F46E5', '#6366F1', '#F59E0B', '#FBBF24'],
+  violet:  ['#7C3AED', '#8B5CF6', '#EC4899', '#F472B6'],
+  blue:    ['#2563EB', '#3B82F6', '#F97316', '#FB923C'],
+  rose:    ['#E11D48', '#F43F5E', '#0EA5E9', '#38BDF8'],
+  emerald: ['#059669', '#10B981', '#F59E0B', '#FBBF24'],
+  amber:   ['#D97706', '#F59E0B', '#7C3AED', '#8B5CF6'],
+  slate:   ['#475569', '#64748B', '#0EA5E9', '#38BDF8'],
+};
+
+// ------------------------------------------------------------------ theme + palette
+function applyPalette(id) {
+  const p = PALETTES[id] || PALETTES.teal;
+  const r = document.documentElement.style;
+  r.setProperty('--brand-p', p[0]); r.setProperty('--brand-p2', p[1]);
+  r.setProperty('--brand-a', p[2]); r.setProperty('--brand-a2', p[3]);
+}
 function applyTheme() {
-  document.documentElement.dataset.theme = store.settings.theme === 'dark' ? 'dark' : 'light';
+  const dark = store.settings.theme === 'dark';
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  applyPalette(store.settings.palette);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.content = store.settings.theme === 'dark' ? '#071a17' : '#0D9488';
+  const p = PALETTES[store.settings.palette] || PALETTES.teal;
+  if (meta) meta.content = dark ? '#0f1620' : p[0];
 }
 
 // ------------------------------------------------------------------ active session
@@ -299,15 +320,23 @@ function openSettings() {
   const s = store.settings;
   $('sName').value = s.name || '';
   $('sRate').value = s.rate || 0;
-  setCurrency(s.currency || '₪');
   $('sGoal').value = s.goalHours || 0;
   $('sDark').checked = s.theme === 'dark';
+  renderPaletteRow();
   renderSyncStatus();
   openSheet($('settingsSheet'));
 }
-function setCurrency(cur) {
-  $('sCurrency').value = cur;
-  $('currChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.cur === cur));
+function renderPaletteRow() {
+  const row = $('paletteRow');
+  const cur = store.settings.palette || 'teal';
+  row.innerHTML = Object.entries(PALETTES).map(([id, c]) =>
+    `<button type="button" class="swatch ${id === cur ? 'on' : ''}" data-pal="${id}" aria-label="${id}" style="--sw-p:${c[0]};--sw-a:${c[2]}"></button>`
+  ).join('');
+}
+function selectPalette(id) {
+  store.saveSettings({ palette: id });
+  applyTheme();
+  renderPaletteRow();
 }
 function renderSyncStatus() {
   const el = $('syncStatus'), btn = $('authBtn');
@@ -339,7 +368,7 @@ function updateAccountUI() {
 }
 function submitSettings(ev) {
   ev.preventDefault();
-  store.saveSettings({ name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, currency: $('sCurrency').value, goalHours: Number($('sGoal').value) || 0, theme: $('sDark').checked ? 'dark' : 'light' });
+  store.saveSettings({ name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, goalHours: Number($('sGoal').value) || 0, theme: $('sDark').checked ? 'dark' : 'light' });
   applyTheme(); closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
 }
 async function handleAuth() {
@@ -371,6 +400,13 @@ function toast(msg) {
   toastTimer = setTimeout(() => { t.classList.remove('show'); setTimeout(() => { t.hidden = true; }, 250); }, 2600);
 }
 
+// ------------------------------------------------------------------ tabs
+function switchView(id) {
+  ['viewHome', 'viewReports', 'viewMore'].forEach((v) => { $(v).hidden = v !== id; });
+  document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('on', b.dataset.view === id));
+  window.scrollTo(0, 0);
+}
+
 // ------------------------------------------------------------------ wire up
 function bind() {
   $('punchBtn').onclick = punch;
@@ -378,7 +414,17 @@ function bind() {
 
   $('prevMonth').onclick = () => shiftMonth(-1);
   $('nextMonth').onclick = () => shiftMonth(1);
-  $('monthLabel').onclick = () => { viewYear = new Date().getFullYear(); viewMonth = new Date().getMonth(); renderMonth(); renderAll(); };
+  // tapping the month name opens the calendar to jump to any month
+  $('monthLabel').onclick = () => openDatePicker({
+    title: 'מעבר לחודש',
+    valueISO: `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-01`,
+    onConfirm: (iso) => { const d = parseDate(iso); viewYear = d.getFullYear(); viewMonth = d.getMonth(); renderMonth(); renderAll(); },
+  });
+
+  // bottom-nav tabs
+  document.getElementById('bottomNav').addEventListener('click', (e) => {
+    const b = e.target.closest('.nav-item[data-view]'); if (b) switchView(b.dataset.view);
+  });
 
   $('addBtn').onclick = () => openEntry(null);
   $('closeSheet').onclick = tryCloseEntry;
@@ -400,7 +446,7 @@ function bind() {
   $('settingsBtn').onclick = openSettings;
   $('closeSettings').onclick = () => closeSheet($('settingsSheet'));
   $('settingsForm').onsubmit = submitSettings;
-  $('currChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-cur]'); if (b) setCurrency(b.dataset.cur); });
+  $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
 

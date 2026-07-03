@@ -2,46 +2,50 @@
    Work Log — design tokens from UI-UX Pro Max (Exaggerated Minimalism)
    Palette: Teal primary + Action Orange · Noto Sans Hebrew
    ============================================================ */
+/* Brand palette inputs (swappable in Settings). Everything else is derived
+   via color-mix so one palette recolors the whole app in both light + dark. */
 :root {
-  --primary: #0D9488;
-  --primary-2: #14B8A6;
+  --brand-p: #0D9488;
+  --brand-p2: #14B8A6;
+  --brand-a: #EA580C;
+  --brand-a2: #F97316;
+
+  --primary: var(--brand-p);
+  --primary-2: var(--brand-p2);
+  --accent: var(--brand-a);
+  --accent-2: var(--brand-a2);
   --on-primary: #ffffff;
-  --accent: #EA580C;
-  --accent-2: #f97316;
-  --bg: #F0FDFA;
+
+  --bg: color-mix(in srgb, var(--brand-p) 5%, #f6f7f9);
   --surface: #ffffff;
-  --surface-2: #E8F1F4;
-  --fg: #134E4A;
-  --muted-fg: #5f807b;
-  --border: #CDEBE6;
+  --surface-2: color-mix(in srgb, var(--brand-p) 7%, #edeff3);
+  --fg: #182029;
+  --muted-fg: #667284;
+  --border: color-mix(in srgb, var(--brand-p) 12%, #e3e7ec);
   --danger: #DC2626;
-  --danger-soft: #fdecec;
-  --accent-soft: #fdede3;
-  --primary-soft: #dcf5f1;
+  --danger-soft: color-mix(in srgb, var(--danger) 10%, #ffffff);
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, #ffffff);
+  --primary-soft: color-mix(in srgb, var(--primary) 13%, #ffffff);
 
   --space-xs: 4px; --space-sm: 8px; --space-md: 16px; --space-lg: 24px; --space-xl: 32px; --space-2xl: 48px;
   --radius: 22px; --radius-sm: 14px;
-  --shadow-sm: 0 1px 2px rgba(19,78,74,.06);
-  --shadow-md: 0 6px 18px -8px rgba(19,78,74,.18);
-  --shadow-lg: 0 18px 40px -16px rgba(19,78,74,.28);
+  --shadow-sm: 0 1px 2px rgba(20,30,40,.06);
+  --shadow-md: 0 6px 18px -8px rgba(20,30,40,.16);
+  --shadow-lg: 0 18px 40px -16px rgba(20,30,40,.24);
   --wheel-item: 44px;
 }
 :root[data-theme="dark"] {
-  --primary: #2dd4bf;
-  --primary-2: #5eead4;
-  --on-primary: #04211d;
-  --accent: #fb7a3c;
-  --accent-2: #fd8f57;
-  --bg: #071a17;
-  --surface: #0f2622;
-  --surface-2: #163531;
-  --fg: #e7fffb;
-  --muted-fg: #8fb3ad;
-  --border: #1f4b44;
+  --on-primary: #ffffff;
+  --bg: color-mix(in srgb, var(--brand-p) 12%, #0a0e13);
+  --surface: color-mix(in srgb, var(--brand-p) 9%, #141b23);
+  --surface-2: color-mix(in srgb, var(--brand-p) 13%, #1c2531);
+  --fg: #eef2f7;
+  --muted-fg: #97a4b5;
+  --border: color-mix(in srgb, var(--brand-p) 18%, #27313d);
   --danger: #f87171;
-  --danger-soft: #341918;
-  --accent-soft: #2c1b12;
-  --primary-soft: #113029;
+  --danger-soft: color-mix(in srgb, var(--danger) 16%, #10161d);
+  --accent-soft: color-mix(in srgb, var(--accent) 22%, #10161d);
+  --primary-soft: color-mix(in srgb, var(--primary) 22%, #10161d);
   --shadow-sm: 0 1px 2px rgba(0,0,0,.4);
   --shadow-md: 0 8px 22px -10px rgba(0,0,0,.6);
   --shadow-lg: 0 20px 46px -18px rgba(0,0,0,.7);
@@ -375,3 +379,66 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
 }
+
+/* ============================================================
+   v4 — tabs, floating bottom nav, palette picker, compact reports
+   ============================================================ */
+.topbar-spacer { width: 44px; }
+.view { animation: fade .25s ease; }
+
+/* keep content clear of the floating bottom nav */
+.app { padding-bottom: calc(104px + env(safe-area-inset-bottom)); }
+
+/* ---- Reports header (month nav + export) ---- */
+.reports-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.reports-bar .month-nav { flex: 1; margin-bottom: 0; }
+.month-label { position: relative; }
+.chip-btn { flex-shrink: 0; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--surface); box-shadow: var(--shadow-sm); color: var(--muted-fg); transition: transform .15s; }
+.chip-btn:active { transform: scale(.9); }
+.chip-btn svg { width: 22px; height: 22px; }
+
+/* ---- compact stats ---- */
+.stats.compact .stat { padding: 13px 8px; }
+.stats.compact .stat-value { font-size: 22px; }
+.stats.compact { margin-bottom: 12px; }
+
+/* ---- list head with inline add ---- */
+.list-head h2 { display: flex; align-items: baseline; gap: 8px; }
+.list-head .list-count { font-size: 13px; font-weight: 500; color: var(--muted-fg); }
+.add-inline { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 800; color: var(--primary); padding: 7px 12px; border-radius: 11px; background: var(--primary-soft); transition: transform .15s; }
+.add-inline:active { transform: scale(.95); }
+.add-inline svg { width: 16px; height: 16px; }
+
+/* ---- palette picker ---- */
+.palette-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.swatch { width: 42px; height: 42px; border-radius: 50%; position: relative; overflow: hidden; border: 3px solid transparent; box-shadow: var(--shadow-sm); transition: transform .15s, border-color .2s; }
+.swatch::before { content: ""; position: absolute; inset: 0; background: linear-gradient(135deg, var(--sw-p) 0 54%, var(--sw-a) 54% 100%); }
+.swatch:active { transform: scale(.9); }
+.swatch.on { border-color: var(--fg); }
+
+/* ---- floating bottom nav ---- */
+.bottom-nav {
+  position: fixed; z-index: 35;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: min(440px, calc(100% - 28px));
+  display: flex; align-items: center; justify-content: space-around; gap: 4px;
+  padding: 7px; border-radius: 24px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px; border-radius: 16px; color: var(--muted-fg); transition: color .2s, background .2s, transform .15s; }
+.nav-item .nav-ic { display: grid; place-items: center; }
+.nav-item .nav-ic svg { width: 24px; height: 24px; }
+.nav-item .nav-label { font-size: 11px; font-weight: 800; }
+.nav-item.on { color: var(--primary); background: var(--primary-soft); }
+.nav-item:active { transform: scale(.93); }
+
+/* ---- "coming soon" placeholder ---- */
+.soon { text-align: center; padding: 64px 24px; color: var(--muted-fg); }
+.soon-icon { display: grid; place-items: center; width: 74px; height: 74px; border-radius: 22px; background: var(--surface-2); color: var(--primary); margin: 0 auto 18px; }
+.soon-icon svg { width: 36px; height: 36px; }
+.soon h2 { font-size: 24px; margin-bottom: 8px; color: var(--fg); }
+.soon p { max-width: 300px; margin: 0 auto; font-size: 15px; line-height: 1.6; }
