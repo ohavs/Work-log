@@ -13,6 +13,8 @@ export const DEFAULT_SETTINGS = {
   theme: 'light',
   palette: 'teal',
   jobs: [], // [{ id, name, rate }]
+  reminder: false,     // תזכורת יומית להזין שעות
+  reminderTime: '18:00',
 };
 
 class Store {

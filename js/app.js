@@ -28,6 +28,9 @@ let jobFilter = null;       // null = all workplaces; else jobId
 let editingJobId = null;
 let tick = null;
 let lastCreatedId = null;
+let reminderPick = '18:00';       // chosen time in the settings picker
+let reminderNotifiedFor = '';     // ISO date we already notified for
+let reminderDismissedFor = '';    // ISO date the in-app banner was dismissed
 let formSnapshot = '';
 
 const TYPE_LABEL = { work: 'עבודה', vacation: 'חופשה', sick: 'מחלה' };
@@ -354,6 +357,10 @@ function openSettings() {
   $('sRate').value = s.rate || 0;
   $('sGoal').value = s.goalHours || 0;
   $('sDark').checked = s.theme === 'dark';
+  reminderPick = s.reminderTime || '18:00';
+  $('sReminder').checked = !!s.reminder;
+  $('sReminderTimeText').textContent = reminderPick;
+  $('reminderTimeField').hidden = !s.reminder;
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
@@ -459,9 +466,51 @@ function updateAccountUI() {
 }
 function submitSettings(ev) {
   ev.preventDefault();
-  store.saveSettings({ name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, goalHours: Number($('sGoal').value) || 0, theme: $('sDark').checked ? 'dark' : 'light' });
+  store.saveSettings({
+    name: $('sName').value.trim(), rate: Number($('sRate').value) || 0, goalHours: Number($('sGoal').value) || 0,
+    theme: $('sDark').checked ? 'dark' : 'light',
+    reminder: $('sReminder').checked, reminderTime: reminderPick,
+  });
   applyTheme(); closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
+  reminderNotifiedFor = ''; refreshReminder();
 }
+
+// ------------------------------------------------------------------ daily reminder
+// A local reminder: while the app is open, once the reminder time has passed and
+// no hours were logged today, show an in-app banner (always) and a system
+// notification (if permission was granted). No backend / push — works when the
+// app is open in the foreground.
+function reminderDue() {
+  const s = store.settings;
+  if (!s.reminder) return false;
+  if (todayCount() > 0 || getActive()) return false; // already logged / clocked in
+  const [h, m] = (s.reminderTime || '18:00').split(':').map(Number);
+  const now = new Date();
+  return now.getHours() * 60 + now.getMinutes() >= (h || 0) * 60 + (m || 0);
+}
+function refreshReminder() {
+  const banner = $('reminderBanner');
+  if (!banner) return;
+  const today = todayISO();
+  const show = reminderDue() && reminderDismissedFor !== today;
+  banner.hidden = !show;
+  if (show && reminderNotifiedFor !== today && 'Notification' in window && Notification.permission === 'granted') {
+    reminderNotifiedFor = today;
+    try {
+      new Notification('שעון עבודה', { body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily', icon: './icons/icon-192.png' });
+    } catch (_) {}
+  }
+}
+function startReminderLoop() {
+  refreshReminder();
+  setInterval(refreshReminder, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReminder(); });
+}
+async function requestNotifyPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (_) {} }
+}
+
 async function handleAuth() {
   try {
     if (store.user) { await store.signOut(); toast('התנתקת'); }
@@ -712,6 +761,10 @@ function bind() {
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
+  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) requestNotifyPermission(); });
+  $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
+  $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
+  $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
 
   $('exportBtn').onclick = openExport;
   $('closeExport').onclick = () => closeSheet($('exportSheet'));
@@ -731,9 +784,10 @@ async function main() {
   initIcons();
   initPickers();
   bind();
-  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); renderAll(); renderMore(); renderSyncStatus(); updateAccountUI(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); renderAll(); renderMore(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
   await store.init();
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); renderAll(); updateAccountUI();
+  startReminderLoop();
   if ('serviceWorker' in navigator) {
     // Auto-reload once when a new service worker takes control (new version).
     let refreshing = false;

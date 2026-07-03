@@ -32,6 +32,11 @@
   <main class="app">
     <!-- ============ HOME view — one-tap clock in / out ============ -->
     <section class="view" id="viewHome">
+      <div class="reminder-banner" id="reminderBanner" hidden>
+        <span class="rb-ic" data-ic="bell"></span>
+        <span class="rb-text">עוד לא רשמת שעות היום</span>
+        <button type="button" class="rb-x" id="reminderDismiss" aria-label="סגירה">×</button>
+      </div>
       <div class="hero" id="hero">
         <p class="hero-date" id="heroDate"></p>
         <div class="timer" id="timer" hidden>
@@ -239,6 +244,15 @@
           <span>מצב כהה</span>
           <span class="switch"><input type="checkbox" id="sDark" /><span class="knob"></span></span>
         </label>
+
+        <label class="switch-field">
+          <span>תזכורת יומית להזין שעות</span>
+          <span class="switch"><input type="checkbox" id="sReminder" /><span class="knob"></span></span>
+        </label>
+        <div class="field" id="reminderTimeField" hidden>
+          <span class="field-label">שעת התזכורת</span>
+          <button type="button" class="picker-field" id="sReminderTime"><span class="pf-ic" data-ic="clock"></span><span id="sReminderTimeText">18:00</span></button>
+        </div>
 
         <div class="sync-box">
           <div class="sync-status" id="syncStatus">מצב שמירה: מקומי במכשיר</div>
