@@ -4,6 +4,8 @@ import { uid } from './util.js';
 
 const LS_ENTRIES = 'wl_entries';
 const LS_SETTINGS = 'wl_settings';
+const LS_NOTES = 'wl_notes';
+const LS_CATS = 'wl_notecats';
 
 export const DEFAULT_SETTINGS = {
   name: '',
@@ -21,6 +23,8 @@ export const DEFAULT_SETTINGS = {
 class Store {
   constructor() {
     this.entries = [];
+    this.notes = [];              // [{ id, title, category, body, fields[], checklist[], tags[], pinned, created, updated }]
+    this.noteCats = [];           // [{ id, name, color }]
     this.settings = { ...DEFAULT_SETTINGS };
     this.mode = 'local';          // 'local' | 'cloud'
     this.user = null;             // { uid, name } when signed in
@@ -56,11 +60,21 @@ class Store {
       const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || 'null');
       if (s) this.settings = { ...DEFAULT_SETTINGS, ...s };
     } catch {}
+    try {
+      const n = JSON.parse(localStorage.getItem(LS_NOTES) || '[]');
+      if (Array.isArray(n)) this.notes = n;
+    } catch {}
+    try {
+      const c = JSON.parse(localStorage.getItem(LS_CATS) || '[]');
+      if (Array.isArray(c)) this.noteCats = c;
+    } catch {}
   }
 
   _saveLocal() {
     localStorage.setItem(LS_ENTRIES, JSON.stringify(this.entries));
     localStorage.setItem(LS_SETTINGS, JSON.stringify(this.settings));
+    localStorage.setItem(LS_NOTES, JSON.stringify(this.notes));
+    localStorage.setItem(LS_CATS, JSON.stringify(this.noteCats));
   }
 
   // ---- firebase ----
@@ -102,6 +116,8 @@ class Store {
         const d = snap.data();
         this.entries = Array.isArray(d.entries) ? d.entries : [];
         this.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) };
+        this.notes = Array.isArray(d.notes) ? d.notes : [];
+        this.noteCats = Array.isArray(d.noteCats) ? d.noteCats : [];
         this._saveLocal(); // keep offline mirror
       } else {
         // First cloud login: push whatever we have locally.
@@ -117,6 +133,8 @@ class Store {
     await fsMod.setDoc(this._docRef, {
       entries: this.entries,
       settings: this.settings,
+      notes: this.notes,
+      noteCats: this.noteCats,
       updatedAt: Date.now(),
     });
   }
@@ -178,6 +196,51 @@ class Store {
 
   saveSettings(data) {
     this.settings = { ...this.settings, ...data };
+    this._persist();
+    this._emit();
+  }
+
+  // ---- notes ----
+  addNote(data) {
+    const now = Date.now();
+    const note = { id: uid(), title: '', category: '', body: '', fields: [], checklist: [], tags: [], pinned: false, created: now, updated: now, ...data };
+    this.notes.unshift(note);
+    this._persist();
+    this._emit();
+    return note;
+  }
+  updateNote(id, data) {
+    const i = this.notes.findIndex((n) => n.id === id);
+    if (i === -1) return;
+    this.notes[i] = { ...this.notes[i], ...data, id, updated: Date.now() };
+    this._persist();
+    this._emit();
+  }
+  deleteNote(id) {
+    this.notes = this.notes.filter((n) => n.id !== id);
+    this._persist();
+    this._emit();
+  }
+
+  // ---- note categories ----
+  addNoteCat(data) {
+    const cat = { id: uid(), name: '', color: 'teal', ...data };
+    this.noteCats.push(cat);
+    this._persist();
+    this._emit();
+    return cat;
+  }
+  updateNoteCat(id, data) {
+    const i = this.noteCats.findIndex((c) => c.id === id);
+    if (i === -1) return;
+    this.noteCats[i] = { ...this.noteCats[i], ...data, id };
+    this._persist();
+    this._emit();
+  }
+  deleteNoteCat(id) {
+    this.noteCats = this.noteCats.filter((c) => c.id !== id);
+    // orphaned notes fall back to uncategorized
+    this.notes = this.notes.map((n) => (n.category === id ? { ...n, category: '' } : n));
     this._persist();
     this._emit();
   }

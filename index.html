@@ -107,12 +107,32 @@
       <div class="job-filter" id="jobFilterM" hidden></div>
       <div id="moreCards"></div>
     </section>
+
+    <!-- ============ NOTES view — free-form info / פנקס ============ -->
+    <section class="view" id="viewNotes" hidden>
+      <div class="notes-top">
+        <div class="search-wrap">
+          <span class="search-ic" data-ic="search"></span>
+          <input type="search" id="noteSearch" placeholder="חיפוש בפנקס" autocomplete="off" />
+        </div>
+        <button class="chip-btn" id="catManageBtn" aria-label="ניהול קטגוריות"><span data-ic="tag"></span></button>
+        <button class="chip-btn accent" id="addNoteBtn" aria-label="פתק חדש"><span data-ic="plus"></span></button>
+      </div>
+      <div class="cat-filter" id="noteCatFilter"></div>
+      <div id="notesWrap"></div>
+      <div class="empty" id="notesEmpty" hidden>
+        <div class="empty-icon" data-ic="notebook"></div>
+        <p class="empty-title">הפנקס ריק</p>
+        <p class="empty-sub">הוסיפו פתק ראשון עם + — אנשי קשר, קודים, נהלים, רעיונות</p>
+      </div>
+    </section>
   </main>
 
   <!-- ============ Floating bottom nav ============ -->
   <nav class="bottom-nav" id="bottomNav">
     <button class="nav-item on" data-view="viewHome"><span class="nav-ic" data-ic="home"></span><span class="nav-label">בית</span></button>
     <button class="nav-item" data-view="viewReports"><span class="nav-ic" data-ic="chart"></span><span class="nav-label">דוחות</span></button>
+    <button class="nav-item" data-view="viewNotes"><span class="nav-ic" data-ic="notebook"></span><span class="nav-label">פנקס</span></button>
     <button class="nav-item" data-view="viewMore"><span class="nav-ic" data-ic="grid"></span><span class="nav-label">עוד</span></button>
   </nav>
 
@@ -257,6 +277,88 @@
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
         </div>
 
+        <button type="submit" class="btn accent big">שמירה</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Note editor sheet ============ -->
+  <div class="sheet-backdrop" id="noteSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="noteSheetTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <button class="text-btn danger" id="deleteNote" hidden>מחיקה</button>
+        <h3 id="noteSheetTitle">פתק חדש</h3>
+        <button class="text-btn" id="closeNote">ביטול</button>
+      </div>
+      <form id="noteForm" class="form" autocomplete="off">
+        <div class="field big"><input type="text" id="nTitle" maxlength="80" placeholder="כותרת" /></div>
+
+        <div class="field">
+          <span class="field-label">קטגוריה</span>
+          <div class="chips wrap" id="nCatChips"></div>
+        </div>
+
+        <div class="field">
+          <span class="field-label">תוכן</span>
+          <textarea id="nBody" class="note-textarea" rows="3" placeholder="כתבו כאן כל דבר…"></textarea>
+        </div>
+
+        <div class="field">
+          <span class="field-label">שדות <em>(תווית → ערך)</em></span>
+          <div id="nFields" class="nfields"></div>
+          <button type="button" class="btn ghost-line" id="addField">+ הוספת שדה</button>
+        </div>
+
+        <div class="field">
+          <span class="field-label">משימות</span>
+          <div id="nChecklist" class="nchecklist"></div>
+          <button type="button" class="btn ghost-line" id="addCheck">+ הוספת פריט</button>
+        </div>
+
+        <div class="field">
+          <span class="field-label">תגיות</span>
+          <div class="tags-input" id="nTagsWrap">
+            <input type="text" id="nTagInput" placeholder="תגית + Enter" />
+          </div>
+        </div>
+
+        <label class="switch-field">
+          <span>נעיצה למעלה</span>
+          <span class="switch"><input type="checkbox" id="nPin" /><span class="knob"></span></span>
+        </label>
+
+        <button type="submit" class="btn accent big">שמירה</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============ Category manage sheet ============ -->
+  <div class="sheet-backdrop" id="catManageSheet" hidden>
+    <div class="sheet compact" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <span class="ghost-spacer"></span>
+        <h3>קטגוריות</h3>
+        <button class="text-btn" id="closeCatManage">סגירה</button>
+      </div>
+      <div class="cat-manage-list" id="catManageList"></div>
+      <button type="button" class="btn ghost-line" id="addCatBtn">+ קטגוריה חדשה</button>
+    </div>
+  </div>
+
+  <!-- ============ Category editor sheet ============ -->
+  <div class="sheet-backdrop" id="catSheet" hidden>
+    <div class="sheet compact" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <button class="text-btn danger" id="deleteCat" hidden>מחיקה</button>
+        <h3 id="catSheetTitle">קטגוריה</h3>
+        <button class="text-btn" id="closeCat">ביטול</button>
+      </div>
+      <form id="catForm" class="form">
+        <div class="field big"><input type="text" id="cName" maxlength="24" placeholder="שם הקטגוריה" required /></div>
+        <div class="field"><span class="field-label">צבע</span><div class="swatches" id="cSwatches"></div></div>
         <button type="submit" class="btn accent big">שמירה</button>
       </form>
     </div>
