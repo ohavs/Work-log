@@ -589,7 +589,7 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .note-date { color: var(--muted-fg); flex-shrink: 0; }
 
 /* --- COMPACT: dense 2-column cards --- */
-.note-card.compact { break-inside: avoid; margin-bottom: 12px; padding: 13px 14px; border-top: 3px solid var(--cat, var(--border)); }
+.note-card.compact { break-inside: avoid; margin-bottom: 12px; padding: 13px 14px; }
 .note-card.compact .note-head .cat-dot { width: 10px; height: 10px; }
 .note-card.compact .note-title { font-size: 14.5px; margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .note-card.compact .note-snippet { font-size: 12.5px; margin-top: 5px; -webkit-line-clamp: 2; line-height: 1.45; }

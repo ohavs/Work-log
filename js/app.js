@@ -938,7 +938,7 @@ function cardCompact(n) {
   const badges = [];
   if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
   if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
-  const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => f.value).filter(Boolean).join(' · ');
+  const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · ');
   return `<article class="note-card compact" data-id="${n.id}" style="--cat:${col}">
     <div class="note-head">
       <span class="cat-dot" style="background:${n.category ? col : 'var(--border)'}"></span>
