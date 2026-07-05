@@ -115,7 +115,7 @@
           <span class="search-ic" data-ic="search"></span>
           <input type="search" id="noteSearch" placeholder="חיפוש בפנקס" autocomplete="off" />
         </div>
-        <button class="chip-btn" id="catManageBtn" aria-label="ניהול קטגוריות"><span data-ic="tag"></span></button>
+        <button class="chip-btn" id="layoutToggle" aria-label="החלפת תצוגה"></button>
         <button class="chip-btn accent" id="addNoteBtn" aria-label="פתק חדש"><span data-ic="plus"></span></button>
       </div>
       <div class="cat-filter" id="noteCatFilter"></div>
@@ -282,6 +282,19 @@
     </div>
   </div>
 
+  <!-- ============ Note view (read) sheet ============ -->
+  <div class="sheet-backdrop" id="noteViewSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="nvTitle">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head">
+        <button class="text-btn" id="nvEdit">עריכה</button>
+        <span class="nv-cat" id="nvCat"></span>
+        <button class="text-btn" id="nvClose">סגירה</button>
+      </div>
+      <div class="note-view" id="noteViewBody"></div>
+    </div>
+  </div>
+
   <!-- ============ Note editor sheet ============ -->
   <div class="sheet-backdrop" id="noteSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="noteSheetTitle">
@@ -295,7 +308,7 @@
         <div class="field big"><input type="text" id="nTitle" maxlength="80" placeholder="כותרת" /></div>
 
         <div class="field">
-          <span class="field-label">קטגוריה</span>
+          <div class="label-row"><span class="field-label">קטגוריה</span><button type="button" class="link-btn" id="manageCatsLink">ניהול</button></div>
           <div class="chips wrap" id="nCatChips"></div>
         </div>
 

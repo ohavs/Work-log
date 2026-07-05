@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   jobs: [], // [{ id, name, rate }]
   reminder: false,     // תזכורת יומית להזין שעות
   reminderTime: '18:00',
+  noteLayout: 'detailed', // 'detailed' | 'compact'
 };
 
 class Store {

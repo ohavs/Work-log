@@ -897,29 +897,67 @@ function renderNoteCatFilter() {
 }
 function setNoteFilter(id) { noteFilter = id === '' ? null : id; renderNoteCatFilter(); renderNotes(); }
 
-function noteCardHTML(n) {
+function noteLayout() { return store.settings.noteLayout === 'compact' ? 'compact' : 'detailed'; }
+function toggleNoteLayout() {
+  store.saveSettings({ noteLayout: noteLayout() === 'detailed' ? 'compact' : 'detailed' });
+  updateLayoutToggle();
+  renderNotes();
+}
+function updateLayoutToggle() {
+  const btn = $('layoutToggle'); if (!btn) return;
+  const compact = noteLayout() === 'compact';
+  btn.innerHTML = svg(compact ? 'rows' : 'grid'); // show the layout you'll switch TO
+  btn.setAttribute('aria-label', compact ? 'תצוגה מפורטת' : 'תצוגה קומפקטית');
+}
+
+function copyBtn(v) { return v ? `<button type="button" class="nf-copy" data-copy="${escapeHtml(v)}" aria-label="העתקה">${svg('copy')}</button>` : ''; }
+
+function cardDetailed(n) {
   const col = catColor(n.category);
-  const done = (n.checklist || []).filter((c) => c.done).length;
-  const total = (n.checklist || []).length;
-  const fields = (n.fields || []).filter((f) => f.label || f.value).slice(0, 3).map((f) =>
-    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val">${escapeHtml(f.value || '')}</span>${f.value ? `<button type="button" class="nf-copy" data-copy="${escapeHtml(f.value)}" aria-label="העתקה">${svg('copy')}</button>` : ''}</div>`).join('');
-  const tags = (n.tags || []).slice(0, 4).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
-  return `<article class="note-card" data-id="${n.id}" style="--cat:${col}">
+  const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
+  const fields = (n.fields || []).filter((f) => f.label || f.value).slice(0, 4).map((f) =>
+    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div>`).join('');
+  const tags = (n.tags || []).slice(0, 6).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  return `<article class="note-card detailed" data-id="${n.id}" style="--cat:${col}">
     <div class="note-head">
-      <h4 class="note-title">${escapeHtml(n.title || 'ללא כותרת')}</h4>
+      ${n.category ? `<span class="note-cat-pill" style="--cat:${col}">${escapeHtml(catName(n.category))}</span>` : '<span></span>'}
       ${n.pinned ? `<span class="note-pin">${svg('pin')}</span>` : ''}
     </div>
+    <h4 class="note-title">${escapeHtml(n.title || 'ללא כותרת')}</h4>
     ${n.body ? `<p class="note-snippet">${escapeHtml(n.body)}</p>` : ''}
     ${fields ? `<div class="note-fields">${fields}</div>` : ''}
-    ${total ? `<div class="note-check-mini">${svg('check')}<span>${done}/${total} משימות</span></div>` : ''}
+    ${total ? `<div class="note-progress"><div class="np-track"><div class="np-fill" style="width:${pct}%"></div></div><span class="np-label">${svg('check')} ${done}/${total}</span></div>` : ''}
     ${tags ? `<div class="note-tags">${tags}</div>` : ''}
-    <div class="note-foot">${n.category ? `<span class="note-cat-name" style="color:${col}">${escapeHtml(catName(n.category))}</span>` : '<span></span>'}<span class="note-date">${relTime(n.updated)}</span></div>
+    <div class="note-foot"><span class="note-date">עודכן ${relTime(n.updated)}</span></div>
   </article>`;
 }
-function masonry(notes) { return `<div class="notes-grid">${notes.map(noteCardHTML).join('')}</div>`; }
+function cardCompact(n) {
+  const col = catColor(n.category);
+  const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
+  const badges = [];
+  if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
+  if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
+  const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => f.value).filter(Boolean).join(' · ');
+  return `<article class="note-card compact" data-id="${n.id}" style="--cat:${col}">
+    <div class="note-head">
+      <span class="cat-dot" style="background:${n.category ? col : 'var(--border)'}"></span>
+      ${n.pinned ? `<span class="note-pin">${svg('pin')}</span>` : ''}
+    </div>
+    <h4 class="note-title">${escapeHtml(n.title || 'ללא כותרת')}</h4>
+    ${sub ? `<p class="note-snippet">${sub}</p>` : ''}
+    <div class="note-foot">${badges.length ? `<span class="note-badges">${badges.join('')}</span>` : '<span></span>'}<span class="note-date">${relTime(n.updated)}</span></div>
+  </article>`;
+}
+function grid(notes) {
+  const layout = noteLayout();
+  const card = layout === 'compact' ? cardCompact : cardDetailed;
+  return `<div class="notes-grid ${layout}">${notes.map(card).join('')}</div>`;
+}
 
 function renderNotes() {
   renderNoteCatFilter();
+  updateLayoutToggle();
   const wrap = $('notesWrap'), empty = $('notesEmpty');
   const list = filteredNotes();
   if (!notesAll().length) { wrap.innerHTML = ''; empty.hidden = false; return; }
@@ -929,21 +967,44 @@ function renderNotes() {
   const pinned = list.filter((n) => n.pinned);
   const rest = list.filter((n) => !n.pinned);
   let html = '';
-  if (pinned.length) html += `<div class="notes-section"><div class="notes-sec-head">${svg('pin')}<span>נעוצים</span></div>${masonry(pinned)}</div>`;
+  if (pinned.length) html += `<div class="notes-section"><div class="notes-sec-head">${svg('pin')}<span>נעוצים</span></div>${grid(pinned)}</div>`;
 
-  const grouped = noteFilter === null && !noteQuery.trim();
+  // detailed view catalogs by category; compact stays a dense flat grid
+  const grouped = noteLayout() === 'detailed' && noteFilter === null && !noteQuery.trim();
   if (grouped) {
-    // catalog by category
     noteCats().forEach((c) => {
       const items = rest.filter((n) => n.category === c.id);
-      if (items.length) html += `<div class="notes-section"><div class="notes-sec-head"><span class="cat-dot" style="background:${CAT_COLORS[c.color] || c.color}"></span><span>${escapeHtml(c.name)}</span></div>${masonry(items)}</div>`;
+      if (items.length) html += `<div class="notes-section"><div class="notes-sec-head"><span class="cat-dot" style="background:${CAT_COLORS[c.color] || c.color}"></span><span>${escapeHtml(c.name)}</span></div>${grid(items)}</div>`;
     });
     const uncat = rest.filter((n) => !n.category);
-    if (uncat.length) html += `<div class="notes-section">${noteCats().length ? '<div class="notes-sec-head"><span>ללא קטגוריה</span></div>' : ''}${masonry(uncat)}</div>`;
+    if (uncat.length) html += `<div class="notes-section">${noteCats().length ? '<div class="notes-sec-head"><span>ללא קטגוריה</span></div>' : ''}${grid(uncat)}</div>`;
   } else if (rest.length) {
-    html += masonry(rest);
+    html += grid(rest);
   }
   wrap.innerHTML = html;
+}
+
+// ---- note view (read) ----
+let viewingNoteId = null;
+function openNoteView(id) {
+  const n = notesAll().find((x) => x.id === id);
+  if (!n) return;
+  viewingNoteId = id;
+  const col = catColor(n.category);
+  $('nvCat').innerHTML = n.category ? `<span class="nv-cat-pill" style="--cat:${col}">${escapeHtml(catName(n.category))}</span>` : '';
+  const fields = (n.fields || []).filter((f) => f.label || f.value).map((f) =>
+    `<div class="nv-field"><span class="nv-flabel">${escapeHtml(f.label || '')}</span><div class="nv-fval-row"><span class="nv-fval">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div></div>`).join('');
+  const checklist = (n.checklist || []).map((c, i) =>
+    `<button type="button" class="nv-check ${c.done ? 'on' : ''}" data-vtoggle="${i}"><span class="nv-check-box">${c.done ? svg('check') : ''}</span><span class="nv-check-text">${escapeHtml(c.text || '')}</span></button>`).join('');
+  const tags = (n.tags || []).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
+  $('noteViewBody').innerHTML = `
+    <div class="nv-titlerow"><h2 class="nv-title">${escapeHtml(n.title || 'ללא כותרת')}</h2>${n.pinned ? `<span class="note-pin">${svg('pin')}</span>` : ''}</div>
+    ${n.body ? `<p class="nv-body">${escapeHtml(n.body)}</p>` : ''}
+    ${fields ? `<div class="nv-fields">${fields}</div>` : ''}
+    ${checklist ? `<div class="nv-checklist">${checklist}</div>` : ''}
+    ${tags ? `<div class="note-tags nv-tags">${tags}</div>` : ''}
+    <div class="nv-meta">עודכן ${relTime(n.updated)}${n.created && n.created !== n.updated ? ` · נוצר ${relTime(n.created)}` : ''}</div>`;
+  openSheet($('noteViewSheet'));
 }
 
 // ---- note editor ----
@@ -1173,14 +1234,31 @@ function bind() {
 
   // ---- פנקס / notes ----
   $('addNoteBtn').onclick = () => openNote(null);
+  $('layoutToggle').onclick = toggleNoteLayout;
   $('noteSearch').addEventListener('input', (e) => { noteQuery = e.target.value; renderNotes(); });
   $('noteCatFilter').addEventListener('click', (e) => { const b = e.target.closest('button[data-cat]'); if (b) setNoteFilter(b.dataset.cat); });
   $('notesWrap').addEventListener('click', (e) => {
-    const copyBtn = e.target.closest('.nf-copy');
-    if (copyBtn) { e.stopPropagation(); copyText(copyBtn.dataset.copy); return; }
+    const cp = e.target.closest('.nf-copy');
+    if (cp) { e.stopPropagation(); copyText(cp.dataset.copy); return; }
     const card = e.target.closest('.note-card[data-id]');
-    if (card) openNote(card.dataset.id);
+    if (card) openNoteView(card.dataset.id);
   });
+  // note view (read) sheet
+  $('nvClose').onclick = () => closeSheet($('noteViewSheet'));
+  $('nvEdit').onclick = () => { const id = viewingNoteId; closeSheet($('noteViewSheet')); openNote(id); };
+  $('noteViewBody').addEventListener('click', (e) => {
+    const cp = e.target.closest('.nf-copy');
+    if (cp) { copyText(cp.dataset.copy); return; }
+    const tog = e.target.closest('[data-vtoggle]');
+    if (tog && viewingNoteId) {
+      const n = notesAll().find((x) => x.id === viewingNoteId); if (!n) return;
+      const cl = (n.checklist || []).map((c) => ({ ...c }));
+      const i = Number(tog.dataset.vtoggle); cl[i].done = !cl[i].done;
+      store.updateNote(viewingNoteId, { checklist: cl });
+      openNoteView(viewingNoteId); // re-render the view in place
+    }
+  });
+  $('manageCatsLink').onclick = openCatManage;
   $('closeNote').onclick = () => closeSheet($('noteSheet'));
   $('noteForm').onsubmit = submitNote;
   $('deleteNote').onclick = deleteCurrentNote;
@@ -1217,8 +1295,7 @@ function bind() {
     }
   });
   $('nTagsWrap').addEventListener('click', (e) => { const b = e.target.closest('[data-del-tag]'); if (b) { noteDraft.tags.splice(Number(b.dataset.delTag), 1); renderNoteTags(); } });
-  // category management
-  $('catManageBtn').onclick = openCatManage;
+  // category management (opened from the note editor's "ניהול" link)
   $('closeCatManage').onclick = () => closeSheet($('catManageSheet'));
   $('addCatBtn').onclick = () => openCat(null);
   $('catManageList').addEventListener('click', (e) => { const r = e.target.closest('.cat-row[data-cat]'); if (r) openCat(r.dataset.cat); });
@@ -1263,11 +1340,11 @@ function bind() {
 
   // backdrop taps: entry sheet uses unsaved guard; others close directly
   $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
-  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'noteSheet', 'catManageSheet', 'catSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'noteSheet', 'noteViewSheet', 'catManageSheet', 'catSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 
   // drag-down-to-dismiss on every bottom sheet
   enableSheetDrag($('entrySheet'), { guard: isDirty, guarded: tryCloseEntry, hide: () => closeSheet($('entrySheet')) });
-  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'timePicker', 'datePicker', 'noteSheet', 'catManageSheet', 'catSheet'].forEach((id) => enableSheetDrag($(id), { hide: () => { $(id).hidden = true; } }));
+  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'timePicker', 'datePicker', 'noteSheet', 'noteViewSheet', 'catManageSheet', 'catSheet'].forEach((id) => enableSheetDrag($(id), { hide: () => { $(id).hidden = true; } }));
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
