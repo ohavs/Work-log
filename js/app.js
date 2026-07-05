@@ -193,8 +193,8 @@ function renderStats(entries) {
   const goalM = Number(store.settings.goalHours) || 0;
   const goalW = Number(store.settings.goalWeekHours) || 0;
   const rings = [];
-  if (goalW > 0) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`)); }
-  if (goalM > 0) { rings.push(ringSVG((totalMin / 60 / goalM) * 100, 'החודש', `${fmtHours(totalMin)} / ${goalM}`)); }
+  if (goalW > 0) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`, weekLabel(weekStartISO(new Date())))); }
+  if (goalM > 0) { rings.push(ringSVG((totalMin / 60 / goalM) * 100, 'החודש', `${fmtHours(totalMin)} / ${goalM}`, `${MONTHS[viewMonth]} ${viewYear}`)); }
   const gr = $('goalRings');
   gr.innerHTML = rings.join('');
   gr.hidden = rings.length === 0;
@@ -206,7 +206,7 @@ function currentWeekMinutes() {
   return jobFilteredEntries().reduce((s, e) => (isWork(e) && weekStartISO(parseDate(e.date)) === wk ? s + workedMinutes(e) : s), 0);
 }
 // A modern progress donut. pct is 0..∞ (clamped for the arc; shown rounded).
-function ringSVG(pctRaw, label, sub) {
+function ringSVG(pctRaw, label, sub, caption) {
   const pct = Math.max(0, Math.min(100, pctRaw));
   const done = pctRaw >= 100;
   const r = 42, C = 2 * Math.PI * r;
@@ -219,6 +219,7 @@ function ringSVG(pctRaw, label, sub) {
     </svg>
     <span class="ring-label">${label}</span>
     <span class="ring-sub">${sub} ש׳</span>
+    ${caption ? `<span class="ring-cap">${caption}</span>` : ''}
   </div>`;
 }
 
