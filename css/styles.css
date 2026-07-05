@@ -80,6 +80,7 @@ svg { display: block; }
 .icon-btn:active { transform: scale(.9); }
 .icon-btn svg { width: 22px; height: 22px; }
 .icon-btn.synced { box-shadow: 0 0 0 2px var(--primary), var(--shadow-sm); }
+.icon-btn.synced.sync-pending { box-shadow: 0 0 0 2px var(--accent), var(--shadow-sm); }
 .icon-btn .avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; }
 .icon-btn .avatar-initial { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--primary); color: var(--on-primary); font-weight: 800; font-size: 15px; }
 
@@ -314,7 +315,9 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .btn.ghost-line { background: transparent; border: 2px solid var(--border); color: var(--fg); }
 
 .sync-box { display: flex; flex-direction: column; gap: 10px; }
-.sync-status { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; }
+.sync-status { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; line-height: 1.5; }
+.sync-status[data-state="synced"] { color: var(--primary); }
+.sync-status[data-state="pending"], .sync-status[data-state="offline"] { color: var(--accent); background: var(--accent-soft); }
 .version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: 2px 0 0; }
 
 /* ---------- action list (export) ---------- */

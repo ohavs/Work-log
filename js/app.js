@@ -600,12 +600,26 @@ function selectPalette(id) {
   applyTheme();
   renderPaletteRow();
 }
+let lastSyncState = null;
 function renderSyncStatus() {
-  const el = $('syncStatus'), btn = $('authBtn');
-  if (!store.cloudAvailable) { el.textContent = 'מצב שמירה: מקומי במכשיר'; btn.hidden = true; return; }
+  const el = $('syncStatus'), btn = $('authBtn'), acc = $('settingsBtn');
+  const setDot = (state) => { if (acc) { acc.classList.toggle('sync-pending', state === 'pending' || state === 'offline'); } };
+  if (!store.cloudAvailable) { el.textContent = 'מצב שמירה: מקומי במכשיר'; el.dataset.state = 'local'; btn.hidden = true; setDot('local'); return; }
   btn.hidden = false;
-  if (store.user) { el.textContent = `☁ מסונכרן בענן · ${store.user.email || store.user.name || 'מחובר'}`; btn.textContent = 'התנתקות'; }
-  else { el.textContent = 'מצב שמירה: מקומי · התחברו לסנכרון בענן'; btn.textContent = 'התחברות לחשבון Google'; }
+  if (!store.user) { el.textContent = 'מצב שמירה: מקומי · התחברו לסנכרון בענן'; el.dataset.state = 'local'; btn.textContent = 'התחברות לחשבון Google'; setDot('local'); return; }
+  btn.textContent = 'התנתקות';
+  const who = store.user.email || store.user.name || 'מחובר';
+  const state = store.syncState;
+  el.dataset.state = state;
+  el.textContent = {
+    synced: `מסונכרן בענן · ${who}`,
+    pending: 'מעלה שינויים לענן…',
+    offline: 'אופליין — הנתונים שמורים במכשיר ויסונכרנו כשהחיבור יחזור',
+  }[state] || `מסונכרן בענן · ${who}`;
+  setDot(state);
+  // gentle confirmation when we catch up after being offline/pending
+  if ((lastSyncState === 'pending' || lastSyncState === 'offline') && state === 'synced') toast('הכל סונכרן לענן ✓');
+  lastSyncState = state;
 }
 
 // signed-in indicator: show the user's avatar (with a synced ring) on the

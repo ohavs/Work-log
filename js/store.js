@@ -74,6 +74,11 @@ class Store {
   async init() {
     this._loadLocal();
     this._emit();
+    // When the network returns, flush anything still pending to the cloud.
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => { this._flush(); this._emit(); });
+      window.addEventListener('offline', () => this._emit());
+    }
     if (firebaseEnabled) {
       try { await this._initFirebase(); } catch (e) { console.warn('Firebase init failed, staying local:', e); }
     }
@@ -82,6 +87,15 @@ class Store {
 
   get cloudAvailable() { return firebaseEnabled; }
   get isCloud() { return this.mode === 'cloud'; }
+  get online() { return typeof navigator === 'undefined' ? true : navigator.onLine !== false; }
+  // 'local' (no account) | 'offline' | 'pending' | 'synced'
+  get syncState() {
+    if (this.mode !== 'cloud') return 'local';
+    if (!this.online) return 'offline';
+    return this._dirty ? 'pending' : 'synced';
+  }
+  // Best-effort push of pending local changes (called on reconnect).
+  _flush() { if (this._docRef && this._dirty) this._pushCloud().then(() => this._emit()).catch(() => {}); }
 
   // ---- local storage ----
   _loadLocal() {
@@ -173,9 +187,25 @@ class Store {
       if (rts > (this._settingsTs || 0)) { this.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) }; this._settingsTs = rts; }
       this._saveLocal(); // keep offline mirror of the merged state
       this._emit();
-      // If we merged in local-only changes (or deletes), push the reconciled state up.
-      if (this._dirty) this._pushCloud();
+      // Push the reconciled state up if we hold anything the server doesn't —
+      // covers offline edits whose in-memory "dirty" flag was lost on reload.
+      if (this._dirty || this._hasUnpushed(d)) this._pushCloud().catch(() => {});
     }, (err) => console.warn('Firestore listen error:', err));
+  }
+
+  // True when local holds an entry/note/cat/setting the server snapshot lacks
+  // or that is newer locally, or a delete the server hasn't applied yet.
+  _hasUnpushed(d) {
+    const newer = (local, remote) => {
+      const rmap = new Map((Array.isArray(remote) ? remote : []).map((x) => [x.id, x.updated || 0]));
+      return (Array.isArray(local) ? local : []).some((x) => { const ru = rmap.get(x.id); return ru === undefined || (x.updated || 0) > ru; });
+    };
+    const pendingDelete = (remote, tomb) => { const ids = new Set((Array.isArray(remote) ? remote : []).map((x) => x.id)); return Object.keys(tomb || {}).some((id) => ids.has(id)); };
+    if (newer(this.entries, d.entries) || pendingDelete(d.entries, this.tombstones.e)) return true;
+    if (newer(this.notes, d.notes) || pendingDelete(d.notes, this.tombstones.n)) return true;
+    if (newer(this.noteCats, d.noteCats) || pendingDelete(d.noteCats, this.tombstones.c)) return true;
+    if ((this._settingsTs || 0) > (Number(d.settingsTs) || 0)) return true;
+    return false;
   }
 
   async _pushCloud() {
@@ -192,6 +222,7 @@ class Store {
         settingsTs: this._settingsTs || 0,
         updatedAt: Date.now(),
       });
+      this._emit(); // reflect 'synced' in the UI
     } catch (e) {
       this._dirty = true; // push failed — keep trying on the next change/snapshot
       throw e;
