@@ -567,7 +567,7 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .note-snippet { color: var(--muted-fg); white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* --- DETAILED: roomy single-column cards --- */
-.note-card.detailed { padding: 16px 18px; border-inline-start: 4px solid var(--cat, var(--border)); }
+.note-card.detailed { padding: 16px 18px; }
 .note-card.detailed .note-title { font-size: 17px; margin-top: 10px; }
 .note-cat-pill { font-size: 11px; font-weight: 800; letter-spacing: .01em; color: var(--cat); background: color-mix(in srgb, var(--cat) 14%, transparent); padding: 4px 10px; border-radius: 999px; }
 .note-card.detailed .note-snippet { font-size: 14px; margin-top: 8px; line-height: 1.55; -webkit-line-clamp: 4; }
@@ -614,7 +614,16 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .nv-flabel { font-size: 12px; font-weight: 700; color: var(--muted-fg); }
 .nv-fval-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
 .nv-fval { flex: 1; font-size: 16px; font-weight: 800; word-break: break-word; }
-.nv-fval-row .nf-copy { width: 38px; height: 38px; background: var(--surface); }
+.nv-fval-row .nf-copy, .nf-eye { width: 38px; height: 38px; border-radius: 8px; background: var(--surface); flex-shrink: 0; display: grid; place-items: center; color: var(--muted-fg); }
+.nf-eye svg { width: 18px; height: 18px; }
+.nf-eye:active { transform: scale(.92); }
+.nv-fval.masked, .nf-val.masked { letter-spacing: 3px; color: var(--muted-fg); }
+.nv-lock { display: inline-grid; place-items: center; vertical-align: -2px; color: var(--muted-fg); }
+.nv-lock svg { width: 13px; height: 13px; }
+/* editor: mark-as-hidden toggle on a field row */
+.fld-secret { flex-shrink: 0; color: var(--muted-fg); display: grid; place-items: center; width: 34px; height: 34px; border-radius: 9px; }
+.fld-secret.on { color: var(--primary); background: var(--primary-soft); }
+.fld-secret svg { width: 18px; height: 18px; }
 .nv-checklist { margin-top: 18px; display: flex; flex-direction: column; gap: 4px; }
 .nv-check { display: flex; align-items: center; gap: 12px; padding: 11px 6px; text-align: start; width: 100%; }
 .nv-check-box { flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; border: 2px solid var(--border); display: grid; place-items: center; color: #fff; transition: background .15s, border-color .15s; }

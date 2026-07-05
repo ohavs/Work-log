@@ -916,7 +916,7 @@ function cardDetailed(n) {
   const col = catColor(n.category);
   const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
   const fields = (n.fields || []).filter((f) => f.label || f.value).slice(0, 4).map((f) =>
-    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div>`).join('');
+    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val${f.secret ? ' masked' : ''}">${f.secret ? '••••••' : escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div>`).join('');
   const tags = (n.tags || []).slice(0, 6).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
   const pct = total ? Math.round((done / total) * 100) : 0;
   return `<article class="note-card detailed" data-id="${n.id}" style="--cat:${col}">
@@ -992,8 +992,10 @@ function openNoteView(id) {
   viewingNoteId = id;
   const col = catColor(n.category);
   $('nvCat').innerHTML = n.category ? `<span class="nv-cat-pill" style="--cat:${col}">${escapeHtml(catName(n.category))}</span>` : '';
-  const fields = (n.fields || []).filter((f) => f.label || f.value).map((f) =>
-    `<div class="nv-field"><span class="nv-flabel">${escapeHtml(f.label || '')}</span><div class="nv-fval-row"><span class="nv-fval">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div></div>`).join('');
+  const fields = (n.fields || []).filter((f) => f.label || f.value).map((f) => {
+    const eye = f.secret ? `<button type="button" class="nf-eye" data-reveal data-val="${escapeHtml(f.value || '')}" aria-label="הצגה">${svg('eye')}</button>` : '';
+    return `<div class="nv-field"><span class="nv-flabel">${escapeHtml(f.label || '')}${f.secret ? ` <span class="nv-lock">${svg('eyeOff')}</span>` : ''}</span><div class="nv-fval-row"><span class="nv-fval${f.secret ? ' masked' : ''}">${f.secret ? '••••••••' : escapeHtml(f.value || '')}</span>${eye}${copyBtn(f.value)}</div></div>`;
+  }).join('');
   const checklist = (n.checklist || []).map((c, i) =>
     `<button type="button" class="nv-check ${c.done ? 'on' : ''}" data-vtoggle="${i}"><span class="nv-check-box">${c.done ? svg('check') : ''}</span><span class="nv-check-text">${escapeHtml(c.text || '')}</span></button>`).join('');
   const tags = (n.tags || []).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
@@ -1023,6 +1025,7 @@ function renderNoteFields() {
     `<div class="nfield-row" data-i="${i}">
       <input type="text" class="nfield-label" data-i="${i}" placeholder="תווית" value="${escapeHtml(f.label || '')}" />
       <input type="text" class="nfield-value" data-i="${i}" placeholder="ערך" value="${escapeHtml(f.value || '')}" />
+      <button type="button" class="fld-secret ${f.secret ? 'on' : ''}" data-secret="${i}" aria-label="${f.secret ? 'שדה מוסתר' : 'הצגה גלויה'}" title="הסתרה — יוצג רק בלחיצה">${svg(f.secret ? 'eyeOff' : 'eye')}</button>
       <button type="button" class="row-del" data-del-field="${i}" aria-label="הסרה">${svg('trash')}</button>
     </div>`).join('');
 }
@@ -1249,6 +1252,14 @@ function bind() {
   $('noteViewBody').addEventListener('click', (e) => {
     const cp = e.target.closest('.nf-copy');
     if (cp) { copyText(cp.dataset.copy); return; }
+    const rev = e.target.closest('[data-reveal]');
+    if (rev) {
+      const val = rev.closest('.nv-field').querySelector('.nv-fval');
+      const masked = val.classList.toggle('masked'); // true when now hidden
+      val.textContent = masked ? '••••••••' : rev.dataset.val;
+      rev.innerHTML = svg(masked ? 'eye' : 'eyeOff');
+      return;
+    }
     const tog = e.target.closest('[data-vtoggle]');
     if (tog && viewingNoteId) {
       const n = notesAll().find((x) => x.id === viewingNoteId); if (!n) return;
@@ -1274,7 +1285,11 @@ function bind() {
     if (e.target.classList.contains('nfield-label')) noteDraft.fields[i].label = e.target.value;
     else if (e.target.classList.contains('nfield-value')) noteDraft.fields[i].value = e.target.value;
   });
-  $('nFields').addEventListener('click', (e) => { const b = e.target.closest('[data-del-field]'); if (b) { noteDraft.fields.splice(Number(b.dataset.delField), 1); renderNoteFields(); } });
+  $('nFields').addEventListener('click', (e) => {
+    const sec = e.target.closest('[data-secret]');
+    if (sec) { const i = Number(sec.dataset.secret); noteDraft.fields[i].secret = !noteDraft.fields[i].secret; renderNoteFields(); return; }
+    const b = e.target.closest('[data-del-field]'); if (b) { noteDraft.fields.splice(Number(b.dataset.delField), 1); renderNoteFields(); }
+  });
   // checklist
   $('addCheck').onclick = () => { noteDraft.checklist.push({ text: '', done: false }); renderNoteChecklist(); };
   $('nChecklist').addEventListener('input', (e) => { if (e.target.classList.contains('ncheck-text')) noteDraft.checklist[Number(e.target.dataset.i)].text = e.target.value; });
