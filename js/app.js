@@ -1,4 +1,5 @@
 import { store } from './store.js';
+import { VAPID_PUBLIC_KEY } from './config.js';
 import { exportPDF } from './pdf.js';
 import { exportCSV } from './csv.js';
 import { initIcons, svg } from './icons.js';
@@ -696,6 +697,8 @@ function startReminderLoop() {
   refreshReminder();
   setInterval(refreshReminder, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReminder(); });
+  // keep this device's push subscription fresh & stored whenever reminders are on
+  if (store.settings.reminder && 'Notification' in window && Notification.permission === 'granted') subscribePush();
 }
 // Returns 'granted' | 'denied' | 'default' | 'unsupported'.
 async function requestNotifyPermission() {
@@ -704,10 +707,39 @@ async function requestNotifyPermission() {
   if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (_) {} }
   return perm;
 }
+// ---- web push: subscribe this device so reminders arrive when the app is closed ----
+function urlB64ToUint8Array(base64) {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(b64), arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function subscribePush() {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !VAPID_PUBLIC_KEY) return false;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY) });
+    store.addPushSub(sub.toJSON());
+    const tz = -new Date().getTimezoneOffset(); // minutes east of UTC → server sends at local time
+    if (store.settings.tz !== tz) store.saveSettings({ tz });
+    return true;
+  } catch (e) { console.warn('push subscribe failed', e); return false; }
+}
+async function unsubscribePush() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) { store.removePushSub(sub.endpoint); await sub.unsubscribe().catch(() => {}); }
+  } catch (_) {}
+}
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
   if (perm === 'granted') {
-    const shown = await showLocalNotification('התזכורות פעילות ✓', 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
+    const pushed = await subscribePush(); // background delivery when app is closed
+    const shown = await showLocalNotification('התזכורות פעילות ✓', pushed ? 'נשלח לך תזכורת יומית גם כשהאפליקציה סגורה' : 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
     toast(shown ? 'התזכורות הופעלו — שלחנו התראת בדיקה' : 'התזכורת הופעלה');
   } else if (perm === 'denied') {
     toast('ההתראות חסומות — יש לאפשר אותן בהגדרות הדפדפן/המכשיר');
@@ -1371,7 +1403,7 @@ function bind() {
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
-  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); });
+  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); else unsubscribePush(); });
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });

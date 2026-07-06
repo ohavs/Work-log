@@ -55,6 +55,7 @@ class Store {
     this.entries = [];
     this.notes = [];              // [{ id, title, category, body, fields[], checklist[], tags[], pinned, created, updated }]
     this.noteCats = [];           // [{ id, name, color }]
+    this.pushSubs = [];           // web-push subscriptions, one per device (merged by endpoint)
     this.tombstones = { e: {}, n: {}, c: {} }; // deleted-id → timestamp, per collection
     this._dirty = false;          // local changes not yet confirmed on the server
     this._settingsTs = 0;         // last local settings change (for last-write-wins)
@@ -120,6 +121,10 @@ class Store {
       if (t && typeof t === 'object') this.tombstones = { e: t.e || {}, n: t.n || {}, c: t.c || {} };
     } catch {}
     try {
+      const ps = JSON.parse(localStorage.getItem('wl_pushsubs') || '[]');
+      if (Array.isArray(ps)) this.pushSubs = ps;
+    } catch {}
+    try {
       const ts = Number(localStorage.getItem('wl_settings_ts')) || 0;
       this._settingsTs = ts;
     } catch {}
@@ -131,6 +136,7 @@ class Store {
     localStorage.setItem(LS_NOTES, JSON.stringify(this.notes));
     localStorage.setItem(LS_CATS, JSON.stringify(this.noteCats));
     localStorage.setItem(LS_TOMB, JSON.stringify(this.tombstones));
+    localStorage.setItem('wl_pushsubs', JSON.stringify(this.pushSubs));
     localStorage.setItem('wl_settings_ts', String(this._settingsTs || 0));
   }
 
@@ -182,6 +188,8 @@ class Store {
       this.entries = mergeCollection(this.entries, d.entries, this.tombstones.e);
       this.notes = mergeCollection(this.notes, d.notes, this.tombstones.n);
       this.noteCats = mergeCollection(this.noteCats, d.noteCats, this.tombstones.c);
+      // push subscriptions: union across devices by endpoint
+      { const m = new Map(); [...(Array.isArray(d.pushSubs) ? d.pushSubs : []), ...this.pushSubs].forEach((s) => { if (s && s.endpoint) m.set(s.endpoint, s); }); this.pushSubs = [...m.values()]; }
       // settings: last-write-wins by timestamp
       const rts = Number(d.settingsTs) || 0;
       if (rts > (this._settingsTs || 0)) { this.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) }; this._settingsTs = rts; }
@@ -219,6 +227,7 @@ class Store {
         notes: this.notes,
         noteCats: this.noteCats,
         tombstones: this.tombstones,
+        pushSubs: this.pushSubs,
         settingsTs: this._settingsTs || 0,
         updatedAt: Date.now(),
       });
@@ -294,6 +303,17 @@ class Store {
     this._settingsTs = Date.now();
     this._persist();
     this._emit();
+  }
+
+  // ---- web-push subscriptions (for background reminders) ----
+  addPushSub(sub) {
+    if (!sub || !sub.endpoint) return;
+    if (!this.pushSubs.some((s) => s.endpoint === sub.endpoint)) { this.pushSubs.push(sub); this._persist(); this._emit(); }
+  }
+  removePushSub(endpoint) {
+    const n = this.pushSubs.length;
+    this.pushSubs = this.pushSubs.filter((s) => s.endpoint !== endpoint);
+    if (this.pushSubs.length !== n) { this._persist(); this._emit(); }
   }
 
   // ---- notes ----

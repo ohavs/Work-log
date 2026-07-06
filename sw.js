@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v31';
+const CACHE = 'worklog-v32';
 const SHELL = [
   './',
   './index.html',
@@ -27,6 +27,19 @@ self.addEventListener('install', (e) => {
       .then((c) => Promise.all(SHELL.map((u) => fetch(new Request(u, { cache: 'reload' })).then((r) => c.put(u, r)).catch(() => {}))))
       .then(() => self.skipWaiting())
   );
+});
+
+// Background push from the reminder cron → show a system notification.
+self.addEventListener('push', (e) => {
+  let data = {};
+  try { data = e.data ? e.data.json() : {}; } catch (_) { data = { body: e.data && e.data.text() }; }
+  const title = data.title || 'שעון עבודה';
+  const body = data.body || 'עוד לא רשמת שעות היום — הקש כדי להזין';
+  e.waitUntil(self.registration.showNotification(title, {
+    body, tag: 'wl-daily', renotify: true,
+    icon: './icons/icon-192.png', badge: './icons/icon-192.png',
+    dir: 'rtl', lang: 'he', data: { url: './' },
+  }));
 });
 
 // Tapping a reminder notification focuses an open tab or opens the app.

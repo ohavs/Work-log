@@ -20,3 +20,7 @@ export const firebaseConfig = {
 };
 
 export const firebaseEnabled = !!(firebaseConfig && firebaseConfig.apiKey);
+
+// Public VAPID key for Web Push (safe to expose; the private key is a GitHub
+// secret used only by the reminder cron to sign messages).
+export const VAPID_PUBLIC_KEY = "BGR9gWrzzQ4QYibp7qpStgjcm5uPRdZ4f4NwiXDdFTi1OxrZb7w03GWmQK6UTAo9PZIev32Fn4StZCD1XNa5W6Y";
