@@ -1448,12 +1448,9 @@ async function main() {
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); renderAll(); updateAccountUI();
   startReminderLoop();
   if ('serviceWorker' in navigator) {
-    // Auto-reload once when a new service worker takes control (new version).
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-      if (refreshing) return; refreshing = true; location.reload();
-    });
-    // updateViaCache:'none' → always fetch a fresh sw.js to detect updates.
+    // Register only. A new SW activates quietly in the background; because the
+    // app is network-first, content is already fresh on each open — so we do
+    // NOT force a page reload (that caused a jarring mid-use refresh).
     navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
   }
 }

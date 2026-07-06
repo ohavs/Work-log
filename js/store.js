@@ -128,6 +128,10 @@ class Store {
       const ts = Number(localStorage.getItem('wl_settings_ts')) || 0;
       this._settingsTs = ts;
     } catch {}
+    // Optimistically restore the signed-in account so the avatar paints
+    // immediately instead of flashing the signed-out state until Firebase auth
+    // finishes restoring asynchronously.
+    try { const u = JSON.parse(localStorage.getItem('wl_user') || 'null'); if (u && u.uid) this.user = u; } catch {}
   }
 
   _saveLocal() {
@@ -158,10 +162,12 @@ class Store {
     authMod.onAuthStateChanged(auth, (user) => {
       if (user) {
         this.user = { uid: user.uid, name: user.displayName || user.email || '', email: user.email || '', photo: user.photoURL || '' };
+        try { localStorage.setItem('wl_user', JSON.stringify(this.user)); } catch {}
         this._attachCloud();
       } else {
         this.user = null;
         this.mode = 'local';
+        try { localStorage.removeItem('wl_user'); } catch {}
         if (this._unsub) { this._unsub(); this._unsub = null; }
       }
       this._emit();
