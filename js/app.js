@@ -736,6 +736,27 @@ async function unsubscribePush() {
     if (sub) { store.removePushSub(sub.endpoint); await sub.unsubscribe().catch(() => {}); }
   } catch (_) {}
 }
+// Schedules a real background push at a chosen time so the user can close the
+// app and confirm notifications arrive. Bypasses the "already logged" check.
+async function sendTestReminder() {
+  const perm = await requestNotifyPermission();
+  if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
+  const ok = await subscribePush();
+  if (!ok) { toast('לא ניתן לרשום את המכשיר להתראות'); return; }
+  const p2 = (n) => String(n).padStart(2, '0');
+  const def = new Date(Date.now() + 2 * 60000); // default: 2 minutes from now
+  openTimePicker({
+    title: 'מתי תגיע התראת הבדיקה?',
+    value: `${p2(def.getHours())}:${p2(def.getMinutes())}`,
+    onConfirm: (v) => {
+      const [h, m] = v.split(':').map(Number);
+      const t = new Date(); t.setHours(h, m, 0, 0);
+      if (t.getTime() <= Date.now()) t.setDate(t.getDate() + 1); // next occurrence
+      store.saveSettings({ pushTestAt: t.getTime() });
+      toast(`התראת בדיקה תגיע בסביבות ${v} — אפשר לסגור את האפליקציה`);
+    },
+  });
+}
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
   if (perm === 'granted') {
@@ -1405,6 +1426,7 @@ function bind() {
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
   $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); else unsubscribePush(); });
+  $('testReminderBtn').onclick = sendTestReminder;
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });

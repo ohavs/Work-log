@@ -28,41 +28,51 @@ function localParts(tzMinutes) {
   };
 }
 
+async function sendAll(subs, payloadObj) {
+  const payload = JSON.stringify(payloadObj);
+  let ok = 0;
+  for (const sub of subs) {
+    try { await webpush.sendNotification(sub, payload); ok++; }
+    catch (err) { console.warn('push failed', err && err.statusCode, (sub.endpoint || '').slice(0, 40)); }
+  }
+  return ok;
+}
+
 async function run() {
   const snap = await db.collectionGroup('data').get();
   const mains = snap.docs.filter((d) => d.ref.id === 'main');
-  let sent = 0, checked = 0;
+  let sent = 0, tested = 0;
 
   for (const doc of mains) {
     const data = doc.data() || {};
     const s = data.settings || {};
     const subs = Array.isArray(data.pushSubs) ? data.pushSubs : [];
-    if (!s.reminder || subs.length === 0) continue;
-    checked++;
+    if (subs.length === 0) continue;
 
+    const notifRef = doc.ref.parent.doc('notif');
+    const notif = (await notifRef.get()).data() || {};
+
+    // 1) explicit test push requested from the app — bypasses time/logged checks
+    const testAt = Number(s.pushTestAt) || 0;
+    if (testAt && Date.now() >= testAt && notif.testSent !== testAt) {
+      const ok = await sendAll(subs, { title: 'בדיקת התראה ✓', body: 'ההתראות עובדות — גם כשהאפליקציה סגורה' });
+      if (ok > 0) { await notifRef.set({ testSent: testAt }, { merge: true }); tested++; }
+    }
+
+    // 2) the daily reminder
+    if (!s.reminder) continue;
     const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
     const target = (rh || 0) * 60 + (rm || 0);
     const { date, minutes } = localParts(s.tz);
     if (minutes < target || minutes >= target + WINDOW_MIN) continue; // not in the send window
-
-    // already logged something today?
     const entries = Array.isArray(data.entries) ? data.entries : [];
-    if (entries.some((e) => e && e.date === date)) continue;
+    if (entries.some((e) => e && e.date === date)) continue;        // already logged today
+    if (notif.lastSent === date) continue;                          // once per day
 
-    // once per day: dedupe via a cron-owned sibling doc
-    const notifRef = doc.ref.parent.doc('notif');
-    const notif = (await notifRef.get()).data() || {};
-    if (notif.lastSent === date) continue;
-
-    const payload = JSON.stringify({ title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין' });
-    let ok = 0;
-    for (const sub of subs) {
-      try { await webpush.sendNotification(sub, payload); ok++; }
-      catch (err) { console.warn('push failed', err && err.statusCode, (sub.endpoint || '').slice(0, 40)); }
-    }
+    const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין' });
     if (ok > 0) { await notifRef.set({ lastSent: date }, { merge: true }); sent++; }
   }
-  console.log(`reminders: checked ${checked} user(s), sent ${sent}`);
+  console.log(`reminders: sent ${sent}, tests ${tested}`);
 }
 
 run().catch((e) => { console.error(e); process.exit(1); });
