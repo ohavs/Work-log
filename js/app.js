@@ -736,26 +736,17 @@ async function unsubscribePush() {
     if (sub) { store.removePushSub(sub.endpoint); await sub.unsubscribe().catch(() => {}); }
   } catch (_) {}
 }
-// Schedules a real background push at a chosen time so the user can close the
-// app and confirm notifications arrive. Bypasses the "already logged" check.
+// Queues an immediate background push so the user can close the app and
+// confirm notifications arrive. Fires on the next server run (bypasses the
+// reminder-time and already-logged checks). No time picker — that only created
+// a race where the workflow ran before the chosen time.
 async function sendTestReminder() {
   const perm = await requestNotifyPermission();
   if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
   const ok = await subscribePush();
   if (!ok) { toast('לא ניתן לרשום את המכשיר להתראות'); return; }
-  const p2 = (n) => String(n).padStart(2, '0');
-  const def = new Date(Date.now() + 2 * 60000); // default: 2 minutes from now
-  openTimePicker({
-    title: 'מתי תגיע התראת הבדיקה?',
-    value: `${p2(def.getHours())}:${p2(def.getMinutes())}`,
-    onConfirm: (v) => {
-      const [h, m] = v.split(':').map(Number);
-      const t = new Date(); t.setHours(h, m, 0, 0);
-      if (t.getTime() <= Date.now()) t.setDate(t.getDate() + 1); // next occurrence
-      store.saveSettings({ pushTestAt: t.getTime() });
-      toast(`התראת בדיקה תגיע בסביבות ${v} — אפשר לסגור את האפליקציה`);
-    },
-  });
+  store.saveSettings({ pushTestAt: Date.now() });
+  toast('בקשת בדיקה נרשמה ✓ — סגור את האפליקציה והרץ את ה-workflow ב-GitHub, וההתראה תגיע');
 }
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
