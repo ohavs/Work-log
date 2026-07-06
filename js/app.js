@@ -1056,6 +1056,16 @@ function renderNotes() {
   const pinned = list.filter((n) => n.pinned);
   const rest = list.filter((n) => !n.pinned);
   let html = '';
+
+  // upcoming reminders overview (only in the default, unfiltered view)
+  if (noteFilter === null && !noteQuery.trim()) {
+    const upcoming = notesAll().filter((n) => n.remindAt && n.remindAt > Date.now()).sort((a, b) => a.remindAt - b.remindAt);
+    if (upcoming.length) {
+      html += `<div class="notes-section"><div class="notes-sec-head">${svg('bell')}<span>תזכורות קרובות</span></div><div class="upcoming-list">` +
+        upcoming.map((n) => `<button type="button" class="upcoming-item" data-id="${n.id}">${svg('bell')}<span class="up-title">${escapeHtml(n.title || 'ללא כותרת')}</span><span class="up-time">${fmtRemind(n.remindAt)}</span></button>`).join('') +
+        `</div></div>`;
+    }
+  }
   if (pinned.length) html += `<div class="notes-section"><div class="notes-sec-head">${svg('pin')}<span>נעוצים</span></div>${grid(pinned)}</div>`;
 
   // detailed view catalogs by category; compact stays a dense flat grid
@@ -1372,6 +1382,8 @@ function bind() {
   $('notesWrap').addEventListener('click', (e) => {
     const cp = e.target.closest('.nf-copy');
     if (cp) { e.stopPropagation(); copyText(cp.dataset.copy); return; }
+    const up = e.target.closest('.upcoming-item[data-id]');
+    if (up) { openNoteView(up.dataset.id); return; }
     const card = e.target.closest('.note-card[data-id]');
     if (card) openNoteView(card.dataset.id);
   });

@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v37';
+const CACHE = 'worklog-v38';
 const SHELL = [
   './',
   './index.html',
@@ -35,8 +35,11 @@ self.addEventListener('push', (e) => {
   try { data = e.data ? e.data.json() : {}; } catch (_) { data = { body: e.data && e.data.text() }; }
   const title = data.title || 'שעון עבודה';
   const body = data.body || 'עוד לא רשמת שעות היום — הקש כדי להזין';
+  // Unique tag per push so each one alerts (a fixed tag silently replaces the
+  // previous notification without re-alerting on many devices).
+  const tag = data.tag || ('wl-' + Date.now());
   e.waitUntil(self.registration.showNotification(title, {
-    body, tag: 'wl-daily', renotify: true,
+    body, tag, renotify: true, vibrate: [120, 60, 120],
     icon: './icons/icon-192.png', badge: './icons/icon-192.png',
     dir: 'rtl', lang: 'he', data: { url: './' },
   }));

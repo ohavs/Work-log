@@ -58,7 +58,7 @@ async function run() {
 
     // 1) explicit test push requested from the app — bypasses time/logged checks
     if (testAt && Date.now() >= testAt && notif.testSent !== testAt) {
-      const ok = await sendAll(subs, { title: 'בדיקת התראה ✓', body: 'ההתראות עובדות — גם כשהאפליקציה סגורה' });
+      const ok = await sendAll(subs, { title: 'בדיקת התראה ✓', body: 'ההתראות עובדות — גם כשהאפליקציה סגורה', tag: 'wl-test-' + testAt });
       console.log(`  → test push sent to ${ok}/${subs.length} device(s)`);
       if (ok > 0) { await notifRef.set({ testSent: testAt }, { merge: true }); tested++; }
     } else if (testAt) {
@@ -73,7 +73,7 @@ async function run() {
       if (!at || Date.now() < at || noteState[nt.id] === at) continue; // not due / already sent
       const title = (nt.title || '').trim() || 'תזכורת';
       const body = (nt.body || '').trim() || 'יש לך תזכורת בפנקס';
-      const ok = await sendAll(subs, { title, body });
+      const ok = await sendAll(subs, { title, body, tag: 'wl-note-' + nt.id + '-' + at });
       console.log(`  → note reminder "${title.slice(0, 20)}" sent to ${ok}/${subs.length}`);
       if (ok > 0) { await notifRef.set({ noteReminders: { [nt.id]: at } }, { merge: true }); sent++; }
     }
@@ -88,7 +88,7 @@ async function run() {
     if (entries.some((e) => e && e.date === date)) continue;        // already logged today
     if (notif.lastSent === date) continue;                          // once per day
 
-    const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין' });
+    const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily-' + date });
     if (ok > 0) { await notifRef.set({ lastSent: date }, { merge: true }); sent++; }
   }
   console.log(`reminders: sent ${sent}, tests ${tested}`);
