@@ -618,8 +618,9 @@ function renderSyncStatus() {
     offline: 'אופליין — הנתונים שמורים במכשיר ויסונכרנו כשהחיבור יחזור',
   }[state] || `מסונכרן בענן · ${who}`;
   setDot(state);
-  // gentle confirmation when we catch up after being offline/pending
-  if ((lastSyncState === 'pending' || lastSyncState === 'offline') && state === 'synced') toast('הכל סונכרן לענן ✓');
+  // confirm only after genuinely reconnecting from offline — routine online
+  // saves (pending→synced) stay silent.
+  if (lastSyncState === 'offline' && state === 'synced') toast('הכל סונכרן לענן ✓');
   lastSyncState = state;
 }
 
