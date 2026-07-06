@@ -42,21 +42,27 @@ async function run() {
   const snap = await db.collectionGroup('data').get();
   const mains = snap.docs.filter((d) => d.ref.id === 'main');
   let sent = 0, tested = 0;
+  console.log(`found ${mains.length} user doc(s); now=${new Date().toISOString()}`);
 
   for (const doc of mains) {
     const data = doc.data() || {};
     const s = data.settings || {};
     const subs = Array.isArray(data.pushSubs) ? data.pushSubs : [];
-    if (subs.length === 0) continue;
+    const testAt = Number(s.pushTestAt) || 0;
+    // diagnostics (no secrets / endpoints)
+    console.log(`- user: subs=${subs.length} reminder=${!!s.reminder} time=${s.reminderTime || '?'} tz=${s.tz ?? '?'} testAt=${testAt ? new Date(testAt).toISOString() : 'none'} entries=${Array.isArray(data.entries) ? data.entries.length : 0}`);
+    if (subs.length === 0) { console.log('  → skip: no push subscription synced (open the app while signed in, enable the reminder)'); continue; }
 
     const notifRef = doc.ref.parent.doc('notif');
     const notif = (await notifRef.get()).data() || {};
 
     // 1) explicit test push requested from the app — bypasses time/logged checks
-    const testAt = Number(s.pushTestAt) || 0;
     if (testAt && Date.now() >= testAt && notif.testSent !== testAt) {
       const ok = await sendAll(subs, { title: 'בדיקת התראה ✓', body: 'ההתראות עובדות — גם כשהאפליקציה סגורה' });
+      console.log(`  → test push sent to ${ok}/${subs.length} device(s)`);
       if (ok > 0) { await notifRef.set({ testSent: testAt }, { merge: true }); tested++; }
+    } else if (testAt) {
+      console.log(`  → test pending: due=${Date.now() >= testAt} alreadySent=${notif.testSent === testAt}`);
     }
 
     // 2) the daily reminder
