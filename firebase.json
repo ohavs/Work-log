@@ -6,6 +6,8 @@
       "firestore.rules",
       "README.md",
       "design-system/**",
+      "cloudflare/**",
+      "scripts/**",
       ".git/**",
       ".github/**",
       ".claude/**",

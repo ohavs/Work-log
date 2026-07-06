@@ -1,0 +1,14 @@
+name = "worklog-reminders"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+
+# Runs every minute — reliable per-minute reminder delivery (unlike GitHub Actions cron).
+[triggers]
+crons = ["* * * * *"]
+
+# Secrets are NOT stored here. Set them in the Cloudflare dashboard
+# (Worker → Settings → Variables and Secrets) or via `wrangler secret put`:
+#   SERVICE_ACCOUNT  – the Firebase service-account JSON (whole file)
+#   VAPID_PUBLIC     – public VAPID key (base64url)
+#   VAPID_PRIVATE    – private VAPID key (base64url)
+#   VAPID_SUBJECT    – e.g. mailto:you@example.com
