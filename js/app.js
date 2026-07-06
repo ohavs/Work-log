@@ -667,17 +667,29 @@ function reminderDue() {
   const now = new Date();
   return now.getHours() * 60 + now.getMinutes() >= (h || 0) * 60 + (m || 0);
 }
+// Notifications in an installed PWA must be shown by the service worker —
+// `new Notification()` fails silently on mobile (and always on iOS).
+async function showLocalNotification(title, body, tag = 'wl-daily') {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
+  const opts = { body, tag, renotify: true, icon: './icons/icon-192.png', badge: './icons/icon-192.png', dir: 'rtl', lang: 'he' };
+  try {
+    if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.showNotification(title, opts);
+      return true;
+    }
+  } catch (_) { /* fall through to the legacy API */ }
+  try { new Notification(title, opts); return true; } catch (_) { return false; }
+}
 function refreshReminder() {
   const banner = $('reminderBanner');
   if (!banner) return;
   const today = todayISO();
   const show = reminderDue() && reminderDismissedFor !== today;
   banner.hidden = !show;
-  if (show && reminderNotifiedFor !== today && 'Notification' in window && Notification.permission === 'granted') {
+  if (show && reminderNotifiedFor !== today) {
     reminderNotifiedFor = today;
-    try {
-      new Notification('שעון עבודה', { body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily', icon: './icons/icon-192.png' });
-    } catch (_) {}
+    showLocalNotification('שעון עבודה', 'עוד לא רשמת שעות היום — הקש כדי להזין');
   }
 }
 function startReminderLoop() {
@@ -685,9 +697,25 @@ function startReminderLoop() {
   setInterval(refreshReminder, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReminder(); });
 }
+// Returns 'granted' | 'denied' | 'default' | 'unsupported'.
 async function requestNotifyPermission() {
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'default') { try { await Notification.requestPermission(); } catch (_) {} }
+  if (!('Notification' in window)) return 'unsupported';
+  let perm = Notification.permission;
+  if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (_) {} }
+  return perm;
+}
+async function enableReminderFlow() {
+  const perm = await requestNotifyPermission();
+  if (perm === 'granted') {
+    const shown = await showLocalNotification('התזכורות פעילות ✓', 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
+    toast(shown ? 'התזכורות הופעלו — שלחנו התראת בדיקה' : 'התזכורת הופעלה');
+  } else if (perm === 'denied') {
+    toast('ההתראות חסומות — יש לאפשר אותן בהגדרות הדפדפן/המכשיר');
+  } else if (perm === 'unsupported') {
+    toast('המכשיר לא תומך בהתראות מערכת');
+  } else {
+    toast('התזכורת הופעלה');
+  }
 }
 
 async function handleAuth() {
@@ -1343,7 +1371,7 @@ function bind() {
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
-  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) requestNotifyPermission(); });
+  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); });
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
