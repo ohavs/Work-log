@@ -1017,13 +1017,14 @@ function cardDetailed(n) {
     ${fields ? `<div class="note-fields">${fields}</div>` : ''}
     ${total ? `<div class="note-progress"><div class="np-track"><div class="np-fill" style="width:${pct}%"></div></div><span class="np-label">${svg('check')} ${done}/${total}</span></div>` : ''}
     ${tags ? `<div class="note-tags">${tags}</div>` : ''}
-    <div class="note-foot"><span class="note-date">עודכן ${relTime(n.updated)}</span></div>
+    <div class="note-foot">${n.remindAt && n.remindAt > Date.now() ? `<span class="note-remind">${svg('bell')}${fmtRemind(n.remindAt)}</span>` : '<span></span>'}<span class="note-date">עודכן ${relTime(n.updated)}</span></div>
   </article>`;
 }
 function cardCompact(n) {
   const col = catColor(n.category);
   const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
   const badges = [];
+  if (n.remindAt && n.remindAt > Date.now()) badges.push(`<span class="nb remind">${svg('bell')}</span>`);
   if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
   if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
   const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · ');
@@ -1093,6 +1094,7 @@ function openNoteView(id) {
     ${fields ? `<div class="nv-fields">${fields}</div>` : ''}
     ${checklist ? `<div class="nv-checklist">${checklist}</div>` : ''}
     ${tags ? `<div class="note-tags nv-tags">${tags}</div>` : ''}
+    ${n.remindAt && n.remindAt > Date.now() ? `<div class="nv-remind">${svg('bell')}<span>תזכורת: ${fmtRemind(n.remindAt)}</span></div>` : ''}
     <div class="nv-meta">עודכן ${relTime(n.updated)}${n.created && n.created !== n.updated ? ` · נוצר ${relTime(n.created)}` : ''}</div>`;
   openSheet($('noteViewSheet'));
 }
@@ -1147,19 +1149,35 @@ function openNote(id = null) {
     $('nTitle').value = n.title || '';
     $('nBody').value = n.body || '';
     $('nPin').checked = !!n.pinned;
-    noteDraft = { fields: (n.fields || []).map((f) => ({ ...f })), checklist: (n.checklist || []).map((c) => ({ ...c })), tags: [...(n.tags || [])] };
+    noteDraft = { fields: (n.fields || []).map((f) => ({ ...f })), checklist: (n.checklist || []).map((c) => ({ ...c })), tags: [...(n.tags || [])], remindAt: n.remindAt || null };
     setNoteCat(n.category || '');
     del.hidden = false;
   } else {
     $('noteSheetTitle').textContent = 'פתק חדש';
     $('nTitle').value = ''; $('nBody').value = ''; $('nPin').checked = false;
-    noteDraft = { fields: [], checklist: [], tags: [] };
+    noteDraft = { fields: [], checklist: [], tags: [], remindAt: null };
     setNoteCat(noteFilter && noteFilter !== '__none' ? noteFilter : '');
     del.hidden = true;
   }
-  renderNoteFields(); renderNoteChecklist(); renderNoteTags();
+  renderNoteFields(); renderNoteChecklist(); renderNoteTags(); renderNoteRemind();
   autoGrow($('nBody'));
   openSheet($('noteSheet'));
+}
+// "3 ביולי, 14:30" — or "היום 14:30" / "מחר 14:30"
+function fmtRemind(ts) {
+  const d = new Date(ts), now = new Date();
+  const t = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  const tom = new Date(now); tom.setDate(now.getDate() + 1);
+  if (sameDay(d, now)) return `היום ${t}`;
+  if (sameDay(d, tom)) return `מחר ${t}`;
+  return `${d.getDate()} ב${MONTHS[d.getMonth()]}, ${t}`;
+}
+function renderNoteRemind() {
+  const has = !!noteDraft.remindAt;
+  $('nRemindText').textContent = has ? fmtRemind(noteDraft.remindAt) : 'ללא תזכורת';
+  $('nRemindBtn').classList.toggle('set', has);
+  $('nRemindClear').hidden = !has;
 }
 function collectNote() {
   return {
@@ -1170,7 +1188,30 @@ function collectNote() {
     fields: noteDraft.fields.filter((f) => (f.label || '').trim() || (f.value || '').trim()),
     checklist: noteDraft.checklist.filter((c) => (c.text || '').trim()),
     tags: noteDraft.tags,
+    remindAt: noteDraft.remindAt || null,
   };
+}
+async function pickNoteReminder() {
+  const perm = await requestNotifyPermission();
+  if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
+  subscribePush(); // register this device so the reminder can be delivered
+  const p2 = (n) => String(n).padStart(2, '0');
+  const base = noteDraft.remindAt ? new Date(noteDraft.remindAt) : new Date(Date.now() + 3600000);
+  openDatePicker({
+    title: 'תאריך התזכורת',
+    valueISO: `${base.getFullYear()}-${p2(base.getMonth() + 1)}-${p2(base.getDate())}`,
+    onConfirm: (iso) => openTimePicker({
+      title: 'שעת התזכורת',
+      value: `${p2(base.getHours())}:${p2(base.getMinutes())}`,
+      onConfirm: (v) => {
+        const [h, m] = v.split(':').map(Number);
+        const d = parseDate(iso); d.setHours(h, m, 0, 0);
+        if (d.getTime() <= Date.now()) { toast('הזמן שנבחר כבר עבר'); return; }
+        noteDraft.remindAt = d.getTime();
+        renderNoteRemind();
+      },
+    }),
+  });
 }
 function submitNote(ev) {
   ev.preventDefault();
@@ -1362,6 +1403,9 @@ function bind() {
   $('noteForm').onsubmit = submitNote;
   $('deleteNote').onclick = deleteCurrentNote;
   $('nBody').addEventListener('input', (e) => autoGrow(e.target));
+  $('nRemindBtn').onclick = pickNoteReminder;
+  $('nRemindClear').onclick = () => { noteDraft.remindAt = null; renderNoteRemind(); };
+  $('nRemindClear').innerHTML = svg('trash');
   $('nCatChips').addEventListener('click', (e) => {
     if (e.target.closest('#newCatChip')) { openCat(null); return; }
     const b = e.target.closest('button[data-cat]'); if (b) setNoteCat(b.dataset.cat);

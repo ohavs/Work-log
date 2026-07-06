@@ -601,8 +601,19 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .note-badges { display: flex; gap: 8px; }
 .note-badges .nb { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 800; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
 .note-badges .nb svg { width: 12px; height: 12px; }
+.note-badges .nb.remind { color: var(--accent); }
+.note-remind { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: var(--accent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.note-remind svg { width: 13px; height: 13px; flex-shrink: 0; }
 
 .notes-noresult { text-align: center; color: var(--muted-fg); padding: 30px 10px; font-weight: 600; }
+
+/* note reminder: editor row + view pill */
+.remind-row { display: flex; align-items: center; gap: 8px; }
+.remind-row .picker-field { flex: 1; }
+.picker-field.set { border-color: var(--accent); }
+.picker-field.set .pf-ic, .picker-field.set span { color: var(--accent); }
+.nv-remind { display: flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 14px; border-radius: 13px; background: var(--accent-soft); color: var(--accent); font-weight: 800; font-size: 14px; }
+.nv-remind svg { width: 18px; height: 18px; flex-shrink: 0; }
 
 /* --- note view (read) sheet --- */
 .nv-cat { display: flex; justify-content: center; }

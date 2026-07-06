@@ -65,7 +65,20 @@ async function run() {
       console.log(`  → test pending: due=${Date.now() >= testAt} alreadySent=${notif.testSent === testAt}`);
     }
 
-    // 2) the daily reminder
+    // 2) per-note reminders (independent of the daily-reminder toggle)
+    const notes = Array.isArray(data.notes) ? data.notes : [];
+    const noteState = notif.noteReminders || {};
+    for (const nt of notes) {
+      const at = Number(nt && nt.remindAt) || 0;
+      if (!at || Date.now() < at || noteState[nt.id] === at) continue; // not due / already sent
+      const title = (nt.title || '').trim() || 'תזכורת';
+      const body = (nt.body || '').trim() || 'יש לך תזכורת בפנקס';
+      const ok = await sendAll(subs, { title, body });
+      console.log(`  → note reminder "${title.slice(0, 20)}" sent to ${ok}/${subs.length}`);
+      if (ok > 0) { await notifRef.set({ noteReminders: { [nt.id]: at } }, { merge: true }); sent++; }
+    }
+
+    // 3) the daily reminder
     if (!s.reminder) continue;
     const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
     const target = (rh || 0) * 60 + (rm || 0);
