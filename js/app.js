@@ -746,7 +746,7 @@ async function sendTestReminder() {
   const ok = await subscribePush();
   if (!ok) { toast('לא ניתן לרשום את המכשיר להתראות'); return; }
   store.saveSettings({ pushTestAt: Date.now() });
-  toast('בקשת בדיקה נרשמה ✓ — סגור את האפליקציה והרץ את ה-workflow ב-GitHub, וההתראה תגיע');
+  toast('בקשת בדיקה נרשמה ✓ — סגור את האפליקציה, וההתראה תגיע תוך כדקה');
 }
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
@@ -1473,7 +1473,8 @@ function bind() {
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
   $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); else unsubscribePush(); });
-  $('testReminderBtn').onclick = sendTestReminder;
+  // כפתור בדיקת התראה מוסתר מה-UI (הקוד נשמר); מקשרים רק אם הוא קיים.
+  { const b = $('testReminderBtn'); if (b) b.onclick = sendTestReminder; }
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
