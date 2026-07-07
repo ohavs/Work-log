@@ -48,6 +48,7 @@ export const DEFAULT_SETTINGS = {
   reminder: false,     // תזכורת יומית להזין שעות
   reminderTime: '18:00',
   noteLayout: 'detailed', // 'detailed' | 'compact'
+  activeShift: null,   // { start, jobId } while clocked in — synced so the cron can watch for a forgotten clock-out
 };
 
 class Store {

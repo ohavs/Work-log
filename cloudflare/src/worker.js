@@ -179,7 +179,7 @@ async function run(env) {
   const pid = sa.project_id;
   const token = await getAccessToken(sa);
   const users = await listMainDocs(token, pid);
-  let sent = 0, tests = 0, notes = 0;
+  let sent = 0, tests = 0, notes = 0, shifts = 0;
 
   for (const { uid, data } of users) {
     const s = data.settings || {};
@@ -195,7 +195,24 @@ async function run(env) {
       if (ok > 0) { notif.testSent = testAt; changed = true; tests++; }
     }
 
-    // 2) per-note reminders
+    // 2) forgotten clock-out: an open shift synced from the app (settings.activeShift).
+    //    9h → gentle "still counting" reminder; 12h → "auto-closed" notice. Deduped per shift.
+    const act = s.activeShift;
+    if (act && Number(act.start)) {
+      const hrs = (Date.now() - Number(act.start)) / 3600000;
+      let st = notif.activeShift;
+      if (!st || st.start !== act.start) { st = { start: act.start }; notif.activeShift = st; changed = true; } // new shift → reset
+      if (hrs >= 9 && !st.remind9) {
+        const ok = await sendAll(subs, { title: 'עדיין בעבודה?', body: 'המשמרת פתוחה כבר מעל 9 שעות — לא שכחת להחתים יציאה?', tag: 'wl-shift9-' + act.start }, env);
+        if (ok > 0) { st.remind9 = true; changed = true; shifts++; }
+      }
+      if (hrs >= 12 && !st.close12) {
+        const ok = await sendAll(subs, { title: 'המשמרת נסגרה אוטומטית', body: 'עברו 12 שעות — סגרנו את המשמרת על 12 שעות. פתח את האפליקציה לבדיקה ותיקון', tag: 'wl-shift12-' + act.start }, env);
+        if (ok > 0) { st.close12 = true; changed = true; shifts++; }
+      }
+    } else if (notif.activeShift) { delete notif.activeShift; changed = true; } // shift ended → clear dedup
+
+    // 3) per-note reminders
     const noteState = notif.noteReminders || {};
     for (const nt of (Array.isArray(data.notes) ? data.notes : [])) {
       const at = Number(nt && nt.remindAt) || 0;
@@ -206,7 +223,7 @@ async function run(env) {
       if (ok > 0) { noteState[nt.id] = at; notif.noteReminders = noteState; changed = true; notes++; }
     }
 
-    // 3) daily reminder
+    // 4) daily reminder
     if (s.reminder) {
       const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
       const target = (rh || 0) * 60 + (rm || 0);
@@ -220,7 +237,7 @@ async function run(env) {
 
     if (changed) await putNotif(token, pid, uid, notif);
   }
-  const summary = { users: users.length, dailySent: sent, tests, noteReminders: notes };
+  const summary = { users: users.length, dailySent: sent, tests, noteReminders: notes, shiftAlerts: shifts };
   console.log('reminders', JSON.stringify(summary));
   return summary;
 }

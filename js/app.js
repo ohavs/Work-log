@@ -17,7 +17,10 @@ import {
 
 const $ = (id) => document.getElementById(id);
 const ACTIVE_KEY = 'wl_active';
-const MIN_SHIFT_MS = 60000; // shifts under a minute are treated as an accidental double-tap
+const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
+const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
+const SHIFT_REMIND_MS = 9 * 3600000;  // 9h open → "forgot to clock out?" reminder (sent by the cron)
+const AUTO_CLOSE_MS = 12 * 3600000;   // 12h open → cap the shift and close it automatically
 
 const now = new Date();
 let viewYear = now.getFullYear();
@@ -81,7 +84,43 @@ function toggleTheme() {
 
 // ------------------------------------------------------------------ active session
 function getActive() { try { return JSON.parse(localStorage.getItem(ACTIVE_KEY) || 'null'); } catch { return null; } }
-function setActive(v) { v ? localStorage.setItem(ACTIVE_KEY, JSON.stringify(v)) : localStorage.removeItem(ACTIVE_KEY); }
+function setActive(v) {
+  v ? localStorage.setItem(ACTIVE_KEY, JSON.stringify(v)) : localStorage.removeItem(ACTIVE_KEY);
+  // Mirror the open shift into synced settings so the reminder cron can watch
+  // for a forgotten clock-out even when the app is fully closed.
+  try { store.saveSettings({ activeShift: v ? { start: v.start, jobId: v.jobId || '' } : null }); } catch {}
+}
+
+// A shift left open for 12h is capped at 12h and closed automatically; the
+// created entry is flagged for review and surfaced via a home-screen banner.
+// Runs on launch (catches a shift the app slept through) and live while open.
+function autoCloseActive(active) {
+  active = active || getActive();
+  if (!active) return null;
+  const startD = new Date(active.start);
+  const endD = new Date(active.start + AUTO_CLOSE_MS);
+  const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
+  setActive(null);
+  const created = store.addEntry(entry);
+  try { localStorage.setItem(AUTOCLOSE_KEY, created.id); } catch {}
+  viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
+  showLocalNotification('המשמרת נסגרה אוטומטית', 'עברו 12 שעות — סגרנו את המשמרת. שכחת יציאה? הקש לתיקון', 'wl-autoclose');
+  renderMonth(); renderAll(); renderMore(); renderHero();
+  toast('משמרת ארוכה נסגרה אוטומטית אחרי 12 שעות · בדקו אותה');
+  return created;
+}
+
+function renderAutoCloseBanner() {
+  const b = $('autoCloseBanner');
+  if (!b) return;
+  const id = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })();
+  const exists = id && store.entries.some((x) => x.id === id);
+  if (!exists) { b.hidden = true; if (id) { try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} } return; }
+  b.hidden = false;
+}
+function clearAutoCloseFlag(id) {
+  try { if (id && localStorage.getItem(AUTOCLOSE_KEY) === id) localStorage.removeItem(AUTOCLOSE_KEY); } catch {}
+}
 function hhmm(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function longDate(d) { return `יום ${DOW[d.getDay()]} · ${d.getDate()} ב${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
 
@@ -93,7 +132,10 @@ function renderHero() {
   const hero = $('hero');
   const d = new Date();
   $('heroDate').textContent = `יום ${DOW[d.getDay()]}, ${d.getDate()} ב${MONTHS[d.getMonth()]}`;
-  const active = getActive();
+  let active = getActive();
+  // A shift the app slept through past the 12h cap: close it before rendering.
+  if (active && Date.now() - active.start >= AUTO_CLOSE_MS) { autoCloseActive(active); active = getActive(); }
+  renderAutoCloseBanner();
   if (active) {
     hero.classList.add('running');
     $('timer').hidden = false; $('heroHint').hidden = true; $('heroToday').hidden = true;
@@ -102,6 +144,7 @@ function renderHero() {
     const startD = new Date(active.start);
     const update = () => {
       const diff = Math.max(0, Date.now() - active.start);
+      if (diff >= AUTO_CLOSE_MS) { clearInterval(tick); tick = null; autoCloseActive(active); return; }
       const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000);
       $('timerVal').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       $('editStart').textContent = `התחלת ב־${hhmm(startD)} · הקש לשינוי`;
@@ -127,14 +170,14 @@ function punch() {
       toast('המשמרת קצרה מדי ולא נשמרה · הקש “כניסה” כשמתחילים באמת');
       return;
     }
-    const entry = { type: 'work', date: toISO(startD), jobId: jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
     setActive(null);
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
     const created = store.addEntry(entry); lastCreatedId = created.id;
     renderMonth(); renderHero();
     toast(`נשמר · ${fmtHours(workedMinutes(entry))} שעות · הקש על הרישום לעריכה`);
   } else {
-    setActive({ start: Date.now() }); renderHero();
+    setActive({ start: Date.now(), jobId: jobFilter || '' }); renderHero();
   }
 }
 
@@ -146,7 +189,7 @@ function openStartEdit() {
     onConfirm: (v) => {
       const [h, m] = v.split(':').map(Number);
       const d = new Date(active.start); d.setHours(h, m, 0, 0);
-      setActive({ start: d.getTime() }); renderHero();
+      setActive({ start: d.getTime(), jobId: active.jobId || '' }); renderHero();
     },
   });
 }
@@ -447,7 +490,7 @@ function submitEntry(ev) {
   } else {
     data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
   }
-  if (editingId) { store.updateEntry(editingId, data); toast('הרישום עודכן'); }
+  if (editingId) { clearAutoCloseFlag(editingId); store.updateEntry(editingId, data); toast('הרישום עודכן'); }
   else { const c = store.addEntry(data); lastCreatedId = c.id; toast('הרישום נוסף'); }
   const d = parseDate(date); viewYear = d.getFullYear(); viewMonth = d.getMonth();
   renderMonth();
@@ -459,6 +502,7 @@ async function deleteCurrentEntry() {
   if (!editingId) return;
   const ok = await showConfirm({ title: 'למחוק את הרישום?', message: 'לא ניתן לשחזר לאחר המחיקה.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
   if (!ok) return;
+  clearAutoCloseFlag(editingId);
   store.deleteEntry(editingId);
   formSnapshot = serializeForm();
   closeSheet($('entrySheet'));
@@ -1478,6 +1522,8 @@ function bind() {
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
+  $('autoCloseDismiss').onclick = (e) => { e.stopPropagation(); try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} $('autoCloseBanner').hidden = true; };
+  $('autoCloseBanner').addEventListener('click', (e) => { if (e.target.id === 'autoCloseDismiss') return; const id = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })(); if (id) openEntry(id); });
 
   $('exportBtn').onclick = openExport;
   $('closeExport').onclick = () => closeSheet($('exportSheet'));

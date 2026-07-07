@@ -119,6 +119,8 @@ svg { display: block; }
 .reminder-banner .rb-text { flex: 1; font-size: 14px; font-weight: 700; }
 .reminder-banner .rb-x { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; font-size: 20px; line-height: 1; color: var(--muted-fg); background: transparent; }
 .reminder-banner .rb-x:active { background: color-mix(in srgb, var(--accent) 20%, transparent); }
+.reminder-banner.warn { background: color-mix(in srgb, #e8a13a 20%, var(--card)); }
+.reminder-banner.warn .rb-ic { color: #c9780a; }
 
 /* ============================================================
    HISTORY
