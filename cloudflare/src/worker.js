@@ -200,14 +200,17 @@ async function run(env) {
     const act = s.activeShift;
     if (act && Number(act.start)) {
       const hrs = (Date.now() - Number(act.start)) / 3600000;
+      const remindH = Math.min(23, Math.max(1, Math.round(Number(s.shiftRemindHours) || 9)));   // user-configurable
+      let maxH = Math.min(24, Math.max(2, Math.round(Number(s.shiftMaxHours) || 12)));
+      if (maxH <= remindH) maxH = Math.min(24, remindH + 1);
       let st = notif.activeShift;
       if (!st || st.start !== act.start) { st = { start: act.start }; notif.activeShift = st; changed = true; } // new shift → reset
-      if (hrs >= 9 && !st.remind9) {
-        const ok = await sendAll(subs, { title: 'עדיין בעבודה?', body: 'המשמרת פתוחה כבר מעל 9 שעות — לא שכחת להחתים יציאה?', tag: 'wl-shift9-' + act.start }, env);
+      if (hrs >= remindH && !st.remind9) {
+        const ok = await sendAll(subs, { title: 'עדיין בעבודה?', body: `המשמרת פתוחה כבר מעל ${remindH} שעות — לא שכחת להחתים יציאה?`, tag: 'wl-shift9-' + act.start }, env);
         if (ok > 0) { st.remind9 = true; changed = true; shifts++; }
       }
-      if (hrs >= 12 && !st.close12) {
-        const ok = await sendAll(subs, { title: 'המשמרת נסגרה אוטומטית', body: 'עברו 12 שעות — סגרנו את המשמרת על 12 שעות. פתח את האפליקציה לבדיקה ותיקון', tag: 'wl-shift12-' + act.start }, env);
+      if (hrs >= maxH && !st.close12) {
+        const ok = await sendAll(subs, { title: 'המשמרת נסגרה אוטומטית', body: `עברו ${maxH} שעות — סגרנו את המשמרת. פתח את האפליקציה לבדיקה ותיקון`, tag: 'wl-shift12-' + act.start }, env);
         if (ok > 0) { st.close12 = true; changed = true; shifts++; }
       }
     } else if (notif.activeShift) { delete notif.activeShift; changed = true; } // shift ended → clear dedup

@@ -19,8 +19,10 @@ const $ = (id) => document.getElementById(id);
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
-const SHIFT_REMIND_MS = 9 * 3600000;  // 9h open → "forgot to clock out?" reminder (sent by the cron)
-const AUTO_CLOSE_MS = 12 * 3600000;   // 12h open → cap the shift and close it automatically
+// After how many open hours a forgotten shift is capped + closed automatically.
+// User-configurable (settings.shiftMaxHours); the 9h "forgot to clock out?"
+// reminder is sent by the cron using settings.shiftRemindHours.
+function autoCloseMs() { return (Number(store.settings.shiftMaxHours) || 12) * 3600000; }
 
 const now = new Date();
 let viewYear = now.getFullYear();
@@ -98,7 +100,7 @@ function autoCloseActive(active) {
   active = active || getActive();
   if (!active) return null;
   const startD = new Date(active.start);
-  const endD = new Date(active.start + AUTO_CLOSE_MS);
+  const endD = new Date(active.start + autoCloseMs());
   const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
   setActive(null);
   const created = store.addEntry(entry);
@@ -134,7 +136,7 @@ function renderHero() {
   $('heroDate').textContent = `יום ${DOW[d.getDay()]}, ${d.getDate()} ב${MONTHS[d.getMonth()]}`;
   let active = getActive();
   // A shift the app slept through past the 12h cap: close it before rendering.
-  if (active && Date.now() - active.start >= AUTO_CLOSE_MS) { autoCloseActive(active); active = getActive(); }
+  if (active && Date.now() - active.start >= autoCloseMs()) { autoCloseActive(active); active = getActive(); }
   renderAutoCloseBanner();
   if (active) {
     hero.classList.add('running');
@@ -144,7 +146,7 @@ function renderHero() {
     const startD = new Date(active.start);
     const update = () => {
       const diff = Math.max(0, Date.now() - active.start);
-      if (diff >= AUTO_CLOSE_MS) { clearInterval(tick); tick = null; autoCloseActive(active); return; }
+      if (diff >= autoCloseMs()) { clearInterval(tick); tick = null; autoCloseActive(active); return; }
       const h = Math.floor(diff / 3600000), m = Math.floor((diff % 3600000) / 60000), s = Math.floor((diff % 60000) / 1000);
       $('timerVal').textContent = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
       $('editStart').textContent = `התחלת ב־${hhmm(startD)} · הקש לשינוי`;
@@ -570,6 +572,8 @@ function openSettings() {
   $('sReminder').checked = !!s.reminder;
   $('sReminderTimeText').textContent = reminderPick;
   $('reminderTimeField').hidden = !s.reminder;
+  $('sShiftRemind').value = s.shiftRemindHours || 9;
+  $('sShiftMax').value = s.shiftMaxHours || 12;
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
@@ -688,6 +692,17 @@ function updateAccountUI() {
     btn.innerHTML = svg('settings');
   }
 }
+// Read + sanitize the forgotten-clock-out hours: reminder in 1..23, auto-close
+// in 2..24 and always strictly greater than the reminder.
+function shiftHoursFromForm() {
+  let remind = Math.round(Number($('sShiftRemind').value)) || 9;
+  let max = Math.round(Number($('sShiftMax').value)) || 12;
+  remind = Math.min(23, Math.max(1, remind));
+  max = Math.min(24, Math.max(2, max));
+  if (max <= remind) max = Math.min(24, remind + 1);
+  return { shiftRemindHours: remind, shiftMaxHours: max };
+}
+
 function submitSettings(ev) {
   ev.preventDefault();
   store.saveSettings({
@@ -695,6 +710,7 @@ function submitSettings(ev) {
     goalHours: Number($('sGoal').value) || 0, goalWeekHours: Number($('sGoalWeek').value) || 0,
     theme: $('sDark').checked ? 'dark' : 'light',
     reminder: $('sReminder').checked, reminderTime: reminderPick,
+    ...shiftHoursFromForm(),
   });
   applyTheme(); closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
   reminderNotifiedFor = ''; refreshReminder();

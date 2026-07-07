@@ -281,6 +281,15 @@
           -->
         </div>
 
+        <div class="field">
+          <span class="field-label">שכחתי לצאת <em>(משמרת פתוחה זמן רב)</em></span>
+          <div class="time-grid">
+            <div class="input-wrap"><input type="number" id="sShiftRemind" min="1" max="23" step="1" inputmode="numeric" value="9" /><span class="input-suffix">תזכורת אחרי (ש׳)</span></div>
+            <div class="input-wrap"><input type="number" id="sShiftMax" min="2" max="24" step="1" inputmode="numeric" value="12" /><span class="input-suffix">סגירה אחרי (ש׳)</span></div>
+          </div>
+          <p class="form-note">אם נשארת “בכניסה” — נשלח תזכורת אחרי מספר השעות הראשון, והמשמרת תיסגר אוטומטית אחרי השני (ותוגבל לאותו משך).</p>
+        </div>
+
         <div class="sync-box">
           <div class="sync-status" id="syncStatus">מצב שמירה: מקומי במכשיר</div>
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
