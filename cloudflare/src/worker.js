@@ -232,7 +232,8 @@ async function run(env) {
       const target = (rh || 0) * 60 + (rm || 0);
       const { date, minutes } = localParts(s.tz);
       const logged = (Array.isArray(data.entries) ? data.entries : []).some((e) => e && e.date === date);
-      if (minutes >= target && minutes < target + WINDOW_MIN && !logged && notif.lastSent !== date) {
+      const clockedIn = act && Number(act.start); // an open shift = already clocked in; the daily nag is only to remind clocking IN
+      if (minutes >= target && minutes < target + WINDOW_MIN && !logged && !clockedIn && notif.lastSent !== date) {
         const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily-' + date }, env);
         if (ok > 0) { notif.lastSent = date; changed = true; sent++; }
       }
