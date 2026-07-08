@@ -1,6 +1,8 @@
 node_modules/
 package.json
 package-lock.json
+# but DO track the Cloudflare Worker's manifest — Workers Builds needs it to deploy
+!cloudflare/package.json
 *.log
 .DS_Store
 screenshot*.png
