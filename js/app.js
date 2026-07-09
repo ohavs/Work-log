@@ -102,8 +102,11 @@ function autoCloseActive(active) {
   const startD = new Date(active.start);
   const endD = new Date(active.start + autoCloseMs());
   const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
-  setActive(null);
+  // Add the entry before clearing the active shift — same ordering fix as
+  // punch(): clearing first would leave a synchronous instant with neither an
+  // entry nor an active shift, wrongly triggering the daily reminder.
   const created = store.addEntry(entry);
+  setActive(null);
   try { localStorage.setItem(AUTOCLOSE_KEY, created.id); } catch {}
   viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
   showLocalNotification('המשמרת נסגרה אוטומטית', 'עברו 12 שעות — סגרנו את המשמרת. שכחת יציאה? הקש לתיקון', 'wl-autoclose');
@@ -173,9 +176,14 @@ function punch() {
       return;
     }
     const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
-    setActive(null);
+    // Add the entry BEFORE clearing the active shift: clearing it fires a
+    // synchronous change event that re-checks the daily reminder, and if the
+    // entry didn't exist yet at that instant, it would look like "nothing
+    // logged, not clocked in" and fire a false "you forgot to log hours" alert
+    // right at clock-out.
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
     const created = store.addEntry(entry); lastCreatedId = created.id;
+    setActive(null);
     renderMonth(); renderHero();
     toast(`נשמר · ${fmtHours(workedMinutes(entry))} שעות · הקש על הרישום לעריכה`);
   } else {
