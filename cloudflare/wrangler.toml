@@ -2,6 +2,11 @@ name = "worklog-reminders"
 main = "src/worker.js"
 compatibility_date = "2024-11-01"
 
+# Without this, `wrangler deploy` (as run by Workers Builds on every Git push)
+# wipes any secret/var that isn't declared in this file — which would delete
+# the dashboard-set secrets below on every future deploy.
+keep_vars = true
+
 # Runs every minute — reliable per-minute reminder delivery (unlike GitHub Actions cron).
 [triggers]
 crons = ["* * * * *"]
