@@ -4,7 +4,9 @@
 
 למה Cloudflare ולא GitHub Actions? ה-cron של GitHub לא אמין — הוא רץ פעם ב-3 שעות במקום כל דקה. ה-Worker של Cloudflare רץ **כל דקה בדיוק**, בחינם, בלי כרטיס אשראי.
 
-הקוד ב-`src/worker.js` הוא עצמאי לחלוטין (Web Crypto בלבד, בלי חבילות npm) — אפשר להדביק אותו ישירות בעורך של Cloudflare.
+הקוד ב-`src/worker.js` הוא עצמאי לחלוטין (Web Crypto בלבד, בלי חבילות npm).
+
+**עדכון:** ה-Worker מחובר ל-Git (Workers Builds) — כל push לענף `claude/hebrew-work-tracker-pwa-m0mv4q` בתיקייה `cloudflare/` נפרס אוטומטית. אין יותר צורך להדביק קוד ידנית בעורך.
 
 ---
 
