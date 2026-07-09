@@ -458,11 +458,12 @@ function openEntry(id = null) {
   openSheet($('entrySheet'));
 }
 
+// Shared "discard unsaved changes?" prompt, reused by every editor sheet.
+async function confirmDiscard() {
+  return showConfirm({ title: 'לצאת בלי לשמור?', message: 'השינויים שביצעת לא יישמרו.', confirmText: 'צא בלי לשמור', danger: true, icon: 'alert' });
+}
 async function tryCloseEntry() {
-  if (isDirty()) {
-    const ok = await showConfirm({ title: 'לצאת בלי לשמור?', message: 'השינויים שביצעת לא יישמרו.', confirmText: 'צא בלי לשמור', danger: true, icon: 'alert' });
-    if (!ok) return;
-  }
+  if (isDirty() && !(await confirmDiscard())) return;
   closeSheet($('entrySheet'));
 }
 
@@ -561,6 +562,13 @@ function onSwipeEnd() {
 }
 
 // ------------------------------------------------------------------ settings
+let settingsFormSnapshot = '';
+// Only the fields deferred to the "שמירה" submit — theme/palette/reminder-toggle
+// already save immediately on change, so closing the sheet never loses them.
+function serializeSettingsForm() {
+  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, rt: reminderPick });
+}
+function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
 function openSettings() {
   const s = store.settings;
   $('sName').value = s.name || '';
@@ -577,7 +585,12 @@ function openSettings() {
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
+  settingsFormSnapshot = serializeSettingsForm();
   openSheet($('settingsSheet'));
+}
+async function tryCloseSettings() {
+  if (isSettingsDirty() && !(await confirmDiscard())) return;
+  closeSheet($('settingsSheet'));
 }
 
 // ------------------------------------------------------------------ workplaces / jobs
@@ -597,6 +610,9 @@ function renderJobsList() {
     ? jobs.map((j) => `<div class="job-row" data-job="${j.id}"><span class="jn">${escapeHtml(j.name)}</span><span class="jr">₪${j.rate || 0}/שעה</span><span class="jedit">${svg('pencil')}</span></div>`).join('')
     : `<div class="jobs-empty">אין מקומות עבודה. הוסיפו כדי לשייך רישומים ולראות שכר נפרד לכל מקום.</div>`;
 }
+let jobFormSnapshot = '';
+function serializeJobForm() { return JSON.stringify({ n: $('jName').value, r: $('jRate').value }); }
+function isJobDirty() { return serializeJobForm() !== jobFormSnapshot; }
 function openJob(id) {
   editingJobId = id;
   const del = $('deleteJob');
@@ -611,7 +627,12 @@ function openJob(id) {
     $('jobForm').reset();
     del.hidden = true;
   }
+  jobFormSnapshot = serializeJobForm();
   openSheet($('jobSheet'));
+}
+async function tryCloseJob() {
+  if (isJobDirty() && !(await confirmDiscard())) return;
+  closeSheet($('jobSheet'));
 }
 function submitJob(ev) {
   ev.preventDefault();
@@ -622,6 +643,7 @@ function submitJob(ev) {
   if (editingJobId) jobs = jobs.map((j) => (j.id === editingJobId ? { ...j, name, rate } : j));
   else jobs.push({ id: uid(), name, rate });
   store.saveSettings({ jobs });
+  jobFormSnapshot = serializeJobForm();
   closeSheet($('jobSheet'));
   renderJobsList(); renderJobFilter();
   toast('נשמר');
@@ -633,6 +655,7 @@ async function deleteCurrentJob() {
   const jobs = jobsList().filter((j) => j.id !== editingJobId);
   if (jobFilter === editingJobId) jobFilter = null;
   store.saveSettings({ jobs });
+  jobFormSnapshot = serializeJobForm();
   closeSheet($('jobSheet'));
   renderJobsList(); renderJobFilter(); renderAll(); renderMore();
   toast('נמחק');
@@ -712,7 +735,9 @@ function submitSettings(ev) {
     reminder: $('sReminder').checked, reminderTime: reminderPick,
     ...shiftHoursFromForm(),
   });
-  applyTheme(); closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
+  applyTheme();
+  settingsFormSnapshot = serializeSettingsForm();
+  closeSheet($('settingsSheet')); toast('ההגדרות נשמרו');
   reminderNotifiedFor = ''; refreshReminder();
 }
 
@@ -965,6 +990,12 @@ function renderMore() {
 }
 
 // ------------------------------------------------------------------ payroll settings
+let payrollFormSnapshot = '';
+function serializePayrollForm() {
+  return JSON.stringify(['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate']
+    .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
+}
+function isPayrollDirty() { return serializePayrollForm() !== payrollFormSnapshot; }
 function openPayroll() {
   const p = payrollOf(store.settings);
   $('pOvertime').checked = !!p.overtime;
@@ -976,7 +1007,12 @@ function openPayroll() {
   $('pVacDays').value = p.annualVacationDays;
   $('pRecDays').value = p.recreationDays;
   $('pRecRate').value = p.recreationDayRate;
+  payrollFormSnapshot = serializePayrollForm();
   openSheet($('payrollSheet'));
+}
+async function tryClosePayroll() {
+  if (isPayrollDirty() && !(await confirmDiscard())) return;
+  closeSheet($('payrollSheet'));
 }
 function submitPayroll(ev) {
   ev.preventDefault();
@@ -993,6 +1029,7 @@ function submitPayroll(ev) {
     recreationDays: num('pRecDays', 0),
     recreationDayRate: num('pRecRate', 0),
   } });
+  payrollFormSnapshot = serializePayrollForm();
   closeSheet($('payrollSheet'));
   renderMore();
   toast('הגדרות השכר נשמרו');
@@ -1209,6 +1246,9 @@ function renderNoteTags() {
   });
 }
 
+let noteFormSnapshot = '';
+function serializeNoteForm() { return JSON.stringify({ t: $('nTitle').value, b: $('nBody').value, p: $('nPin').checked, c: currentNoteCat(), d: noteDraft }); }
+function isNoteDirty() { return serializeNoteForm() !== noteFormSnapshot; }
 function openNote(id = null) {
   editingNoteId = id;
   const del = $('deleteNote');
@@ -1231,7 +1271,12 @@ function openNote(id = null) {
   }
   renderNoteFields(); renderNoteChecklist(); renderNoteTags(); renderNoteRemind();
   autoGrow($('nBody'));
+  noteFormSnapshot = serializeNoteForm();
   openSheet($('noteSheet'));
+}
+async function tryCloseNote() {
+  if (isNoteDirty() && !(await confirmDiscard())) return;
+  closeSheet($('noteSheet'));
 }
 // "3 ביולי, 14:30" — or "היום 14:30" / "מחר 14:30"
 function fmtRemind(ts) {
@@ -1289,6 +1334,7 @@ function submitNote(ev) {
   if (!data.title && !data.body && !data.fields.length && !data.checklist.length) { toast('הפתק ריק — הוסיפו כותרת או תוכן'); return; }
   if (editingNoteId) { store.updateNote(editingNoteId, data); toast('הפתק נשמר'); }
   else { store.addNote(data); toast('פתק נוסף'); }
+  noteFormSnapshot = serializeNoteForm();
   closeSheet($('noteSheet'));
   renderNotes();
 }
@@ -1297,6 +1343,7 @@ async function deleteCurrentNote() {
   const ok = await showConfirm({ title: 'למחוק את הפתק?', message: 'לא ניתן לשחזר לאחר המחיקה.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
   if (!ok) return;
   store.deleteNote(editingNoteId);
+  noteFormSnapshot = serializeNoteForm();
   closeSheet($('noteSheet'));
   renderNotes();
   toast('הפתק נמחק');
@@ -1314,6 +1361,9 @@ function renderSwatches(sel) {
   $('cSwatches').innerHTML = Object.entries(CAT_COLORS).map(([k, v]) =>
     `<button type="button" class="cat-swatch ${sel === k ? 'on' : ''}" data-swatch="${k}" style="background:${v}" aria-label="${k}"></button>`).join('');
 }
+let catFormSnapshot = '';
+function serializeCatForm() { return JSON.stringify({ n: $('cName').value, c: catPick }); }
+function isCatDirty() { return serializeCatForm() !== catFormSnapshot; }
 function openCat(id = null) {
   editingCatId = id;
   const del = $('deleteCat');
@@ -1330,7 +1380,12 @@ function openCat(id = null) {
     del.hidden = true;
   }
   renderSwatches(catPick);
+  catFormSnapshot = serializeCatForm();
   openSheet($('catSheet'));
+}
+async function tryCloseCat() {
+  if (isCatDirty() && !(await confirmDiscard())) return;
+  closeSheet($('catSheet'));
 }
 function submitCat(ev) {
   ev.preventDefault();
@@ -1338,6 +1393,7 @@ function submitCat(ev) {
   if (!name) { toast('נא להזין שם קטגוריה'); return; }
   if (editingCatId) store.updateNoteCat(editingCatId, { name, color: catPick });
   else { const c = store.addNoteCat({ name, color: catPick }); if (!editingNoteId && $('noteSheet').hidden === false) {} }
+  catFormSnapshot = serializeCatForm();
   closeSheet($('catSheet'));
   renderCatManageList();
   if ($('noteSheet').hidden === false) renderNoteCatChips(currentNoteCat());
@@ -1351,6 +1407,7 @@ async function deleteCurrentCat() {
   if (!ok) return;
   store.deleteNoteCat(editingCatId);
   if (noteFilter === editingCatId) noteFilter = null;
+  catFormSnapshot = serializeCatForm();
   closeSheet($('catSheet'));
   renderCatManageList(); renderNotes();
   if ($('noteSheet').hidden === false) renderNoteCatChips(currentNoteCat());
@@ -1403,7 +1460,7 @@ function bind() {
     onConfirm: (iso) => { const d = parseDate(iso); viewYear = d.getFullYear(); viewMonth = d.getMonth(); renderMonth(); renderAll(); renderMore(); },
   });
   $('payrollBtn').onclick = openPayroll;
-  $('closePayroll').onclick = () => closeSheet($('payrollSheet'));
+  $('closePayroll').onclick = tryClosePayroll;
   $('payrollForm').onsubmit = submitPayroll;
   $('moreCards').addEventListener('click', (e) => {
     const y = e.target.closest('button[data-yr]');
@@ -1430,7 +1487,7 @@ function bind() {
   ['jobFilterR', 'jobFilterM'].forEach((id) => $(id).addEventListener('click', (e) => { const b = e.target.closest('button[data-job]'); if (b) setJobFilter(b.dataset.job); }));
   $('addJobBtn').onclick = () => openJob(null);
   $('jobsList').addEventListener('click', (e) => { const r = e.target.closest('.job-row[data-job]'); if (r) openJob(r.dataset.job); });
-  $('closeJob').onclick = () => closeSheet($('jobSheet'));
+  $('closeJob').onclick = tryCloseJob;
   $('jobForm').onsubmit = submitJob;
   $('deleteJob').onclick = deleteCurrentJob;
 
@@ -1471,12 +1528,16 @@ function bind() {
     }
   });
   $('manageCatsLink').onclick = openCatManage;
-  $('closeNote').onclick = () => closeSheet($('noteSheet'));
+  $('closeNote').onclick = tryCloseNote;
   $('noteForm').onsubmit = submitNote;
   $('deleteNote').onclick = deleteCurrentNote;
   $('nBody').addEventListener('input', (e) => autoGrow(e.target));
   $('nRemindBtn').onclick = pickNoteReminder;
-  $('nRemindClear').onclick = () => { noteDraft.remindAt = null; renderNoteRemind(); };
+  $('nRemindClear').onclick = async () => {
+    const ok = await showConfirm({ title: 'להסיר את התזכורת?', message: 'התזכורת שנקבעה לפתק זה תבוטל.', confirmText: 'הסרה', danger: true, icon: 'trash' });
+    if (!ok) return;
+    noteDraft.remindAt = null; renderNoteRemind();
+  };
   $('nRemindClear').innerHTML = svg('trash');
   $('nCatChips').addEventListener('click', (e) => {
     if (e.target.closest('#newCatChip')) { openCat(null); return; }
@@ -1489,18 +1550,35 @@ function bind() {
     if (e.target.classList.contains('nfield-label')) noteDraft.fields[i].label = e.target.value;
     else if (e.target.classList.contains('nfield-value')) noteDraft.fields[i].value = e.target.value;
   });
-  $('nFields').addEventListener('click', (e) => {
+  $('nFields').addEventListener('click', async (e) => {
     const sec = e.target.closest('[data-secret]');
     if (sec) { const i = Number(sec.dataset.secret); noteDraft.fields[i].secret = !noteDraft.fields[i].secret; renderNoteFields(); return; }
-    const b = e.target.closest('[data-del-field]'); if (b) { noteDraft.fields.splice(Number(b.dataset.delField), 1); renderNoteFields(); }
+    const b = e.target.closest('[data-del-field]');
+    if (b) {
+      const i = Number(b.dataset.delField);
+      const f = noteDraft.fields[i];
+      if ((f.label || '').trim() || (f.value || '').trim()) {
+        const ok = await showConfirm({ title: 'להסיר את השדה?', message: 'השדה והערך שלו יימחקו.', confirmText: 'הסרה', danger: true, icon: 'trash' });
+        if (!ok) return;
+      }
+      noteDraft.fields.splice(i, 1); renderNoteFields();
+    }
   });
   // checklist
   $('addCheck').onclick = () => { noteDraft.checklist.push({ text: '', done: false }); renderNoteChecklist(); };
   $('nChecklist').addEventListener('input', (e) => { if (e.target.classList.contains('ncheck-text')) noteDraft.checklist[Number(e.target.dataset.i)].text = e.target.value; });
-  $('nChecklist').addEventListener('click', (e) => {
+  $('nChecklist').addEventListener('click', async (e) => {
     const tog = e.target.closest('[data-toggle]');
     if (tog) { const i = Number(tog.dataset.toggle); noteDraft.checklist[i].done = !noteDraft.checklist[i].done; renderNoteChecklist(); return; }
-    const del = e.target.closest('[data-del-check]'); if (del) { noteDraft.checklist.splice(Number(del.dataset.delCheck), 1); renderNoteChecklist(); }
+    const del = e.target.closest('[data-del-check]');
+    if (del) {
+      const i = Number(del.dataset.delCheck);
+      if ((noteDraft.checklist[i].text || '').trim()) {
+        const ok = await showConfirm({ title: 'למחוק את הפריט?', message: 'הפריט ברשימה יימחק.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
+        if (!ok) return;
+      }
+      noteDraft.checklist.splice(i, 1); renderNoteChecklist();
+    }
   });
   // tags
   $('nTagInput').addEventListener('keydown', (e) => {
@@ -1518,7 +1596,7 @@ function bind() {
   $('closeCatManage').onclick = () => closeSheet($('catManageSheet'));
   $('addCatBtn').onclick = () => openCat(null);
   $('catManageList').addEventListener('click', (e) => { const r = e.target.closest('.cat-row[data-cat]'); if (r) openCat(r.dataset.cat); });
-  $('closeCat').onclick = () => closeSheet($('catSheet'));
+  $('closeCat').onclick = tryCloseCat;
   $('catForm').onsubmit = submitCat;
   $('deleteCat').onclick = deleteCurrentCat;
   $('cSwatches').addEventListener('click', (e) => { const b = e.target.closest('[data-swatch]'); if (b) { catPick = b.dataset.swatch; renderSwatches(catPick); } });
@@ -1527,7 +1605,7 @@ function bind() {
 
   $('settingsBtn').onclick = openSettings;
   $('themeToggle').onclick = toggleTheme;
-  $('closeSettings').onclick = () => closeSheet($('settingsSheet'));
+  $('closeSettings').onclick = tryCloseSettings;
   $('settingsForm').onsubmit = submitSettings;
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
@@ -1561,13 +1639,24 @@ function bind() {
   entriesEl.addEventListener('touchend', onSwipeEnd);
   entriesEl.addEventListener('touchcancel', onSwipeEnd);
 
-  // backdrop taps: entry sheet uses unsaved guard; others close directly
-  $('entrySheet').addEventListener('click', (e) => { if (e.target.id === 'entrySheet') tryCloseEntry(); });
-  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'noteSheet', 'noteViewSheet', 'catManageSheet', 'catSheet'].forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+  // backdrop taps: editor sheets with deferred fields use the unsaved-changes
+  // guard; read-only / action sheets (export, note view, category list) close
+  // directly since they hold nothing that can be lost.
+  const SHEET_GUARDS = {
+    entrySheet: { isDirty, tryClose: tryCloseEntry },
+    settingsSheet: { isDirty: isSettingsDirty, tryClose: tryCloseSettings },
+    payrollSheet: { isDirty: isPayrollDirty, tryClose: tryClosePayroll },
+    jobSheet: { isDirty: isJobDirty, tryClose: tryCloseJob },
+    noteSheet: { isDirty: isNoteDirty, tryClose: tryCloseNote },
+    catSheet: { isDirty: isCatDirty, tryClose: tryCloseCat },
+  };
+  const DIRECT_CLOSE_SHEETS = ['exportSheet', 'noteViewSheet', 'catManageSheet'];
+  Object.entries(SHEET_GUARDS).forEach(([id, g]) => $(id).addEventListener('click', (e) => { if (e.target.id === id) g.tryClose(); }));
+  DIRECT_CLOSE_SHEETS.forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 
   // drag-down-to-dismiss on every bottom sheet
-  enableSheetDrag($('entrySheet'), { guard: isDirty, guarded: tryCloseEntry, hide: () => closeSheet($('entrySheet')) });
-  ['settingsSheet', 'exportSheet', 'payrollSheet', 'jobSheet', 'timePicker', 'datePicker', 'noteSheet', 'noteViewSheet', 'catManageSheet', 'catSheet'].forEach((id) => enableSheetDrag($(id), { hide: () => { $(id).hidden = true; } }));
+  Object.entries(SHEET_GUARDS).forEach(([id, g]) => enableSheetDrag($(id), { guard: g.isDirty, guarded: g.tryClose, hide: () => closeSheet($(id)) }));
+  [...DIRECT_CLOSE_SHEETS, 'timePicker', 'datePicker'].forEach((id) => enableSheetDrag($(id), { hide: () => { $(id).hidden = true; } }));
 
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
