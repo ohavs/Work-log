@@ -36,6 +36,7 @@ let editingJobId = null;
 let tick = null;
 let lastCreatedId = null;
 let reminderPick = '18:00';       // chosen time in the settings picker
+let offDaysPick = [];             // chosen non-work weekdays (0=Sunday..6=Saturday) in the settings sheet
 let reminderNotifiedFor = '';     // ISO date we already notified for
 let reminderDismissedFor = '';    // ISO date the in-app banner was dismissed
 let noteFilter = null;            // null = all categories; else category id (or '__none')
@@ -574,9 +575,12 @@ let settingsFormSnapshot = '';
 // Only the fields deferred to the "שמירה" submit — theme/palette/reminder-toggle
 // already save immediately on change, so closing the sheet never loses them.
 function serializeSettingsForm() {
-  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, rt: reminderPick });
+  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, rt: reminderPick, od: [...offDaysPick].sort() });
 }
 function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
+function renderOffDaysChips() {
+  $('offDaysChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', offDaysPick.includes(Number(b.dataset.day))));
+}
 function openSettings() {
   const s = store.settings;
   $('sName').value = s.name || '';
@@ -590,6 +594,8 @@ function openSettings() {
   $('reminderTimeField').hidden = !s.reminder;
   $('sShiftRemind').value = s.shiftRemindHours || 9;
   $('sShiftMax').value = s.shiftMaxHours || 12;
+  offDaysPick = Array.isArray(s.offDays) ? [...s.offDays] : [];
+  renderOffDaysChips();
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
@@ -741,6 +747,7 @@ function submitSettings(ev) {
     goalHours: Number($('sGoal').value) || 0, goalWeekHours: Number($('sGoalWeek').value) || 0,
     theme: $('sDark').checked ? 'dark' : 'light',
     reminder: $('sReminder').checked, reminderTime: reminderPick,
+    offDays: [...offDaysPick].sort(),
     ...shiftHoursFromForm(),
   });
   applyTheme();
@@ -758,8 +765,9 @@ function reminderDue() {
   const s = store.settings;
   if (!s.reminder) return false;
   if (todayCount() > 0 || getActive()) return false; // already logged / clocked in
-  const [h, m] = (s.reminderTime || '18:00').split(':').map(Number);
   const now = new Date();
+  if (Array.isArray(s.offDays) && s.offDays.includes(now.getDay())) return false; // marked as a non-work day
+  const [h, m] = (s.reminderTime || '18:00').split(':').map(Number);
   return now.getHours() * 60 + now.getMinutes() >= (h || 0) * 60 + (m || 0);
 }
 // Notifications in an installed PWA must be shown by the service worker —
@@ -1622,6 +1630,12 @@ function bind() {
   // כפתור בדיקת התראה מוסתר מה-UI (הקוד נשמר); מקשרים רק אם הוא קיים.
   { const b = $('testReminderBtn'); if (b) b.onclick = sendTestReminder; }
   $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
+  $('offDaysChips').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-day]'); if (!b) return;
+    const d = Number(b.dataset.day);
+    offDaysPick = offDaysPick.includes(d) ? offDaysPick.filter((x) => x !== d) : [...offDaysPick, d];
+    renderOffDaysChips();
+  });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
   $('autoCloseDismiss').onclick = (e) => { e.stopPropagation(); try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} $('autoCloseBanner').hidden = true; };

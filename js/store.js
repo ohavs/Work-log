@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS = {
   activeShift: null,   // { start, jobId } while clocked in — synced so the cron can watch for a forgotten clock-out
   shiftRemindHours: 9, // שכחתי-לצאת: אחרי כמה שעות פתוחות לשלוח תזכורת
   shiftMaxHours: 12,   // שכחתי-לצאת: אחרי כמה שעות לסגור אוטומטית (ולהגביל את המשמרת)
+  offDays: [],         // ימים בשבוע (0=ראשון..6=שבת) בהם לא נשלחת תזכורת יומית
 };
 
 class Store {

@@ -25,6 +25,7 @@ function localParts(tzMinutes) {
   return {
     date: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`,
     minutes: d.getUTCHours() * 60 + d.getUTCMinutes(),
+    dow: d.getUTCDay(),
   };
 }
 
@@ -82,8 +83,10 @@ async function run() {
     if (!s.reminder) continue;
     const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
     const target = (rh || 0) * 60 + (rm || 0);
-    const { date, minutes } = localParts(s.tz);
+    const { date, minutes, dow } = localParts(s.tz);
     if (minutes < target || minutes >= target + WINDOW_MIN) continue; // not in the send window
+    if (s.activeShift && Number(s.activeShift.start)) continue;      // already clocked in
+    if (Array.isArray(s.offDays) && s.offDays.includes(dow)) continue; // marked as a non-work day
     const entries = Array.isArray(data.entries) ? data.entries : [];
     if (entries.some((e) => e && e.date === date)) continue;        // already logged today
     if (notif.lastSent === date) continue;                          // once per day

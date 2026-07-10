@@ -172,7 +172,7 @@ async function sendAll(subs, payload, env) {
 function localParts(tz) {
   const d = new Date(Date.now() + (Number(tz) || 0) * 60000);
   const pad = (n) => String(n).padStart(2, '0');
-  return { date: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, minutes: d.getUTCHours() * 60 + d.getUTCMinutes() };
+  return { date: `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`, minutes: d.getUTCHours() * 60 + d.getUTCMinutes(), dow: d.getUTCDay() };
 }
 async function run(env) {
   const sa = JSON.parse(env.SERVICE_ACCOUNT);
@@ -230,10 +230,11 @@ async function run(env) {
     if (s.reminder) {
       const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
       const target = (rh || 0) * 60 + (rm || 0);
-      const { date, minutes } = localParts(s.tz);
+      const { date, minutes, dow } = localParts(s.tz);
       const logged = (Array.isArray(data.entries) ? data.entries : []).some((e) => e && e.date === date);
       const clockedIn = act && Number(act.start); // an open shift = already clocked in; the daily nag is only to remind clocking IN
-      if (minutes >= target && minutes < target + WINDOW_MIN && !logged && !clockedIn && notif.lastSent !== date) {
+      const offDay = Array.isArray(s.offDays) && s.offDays.includes(dow); // user marked this weekday as a non-work day
+      if (minutes >= target && minutes < target + WINDOW_MIN && !logged && !clockedIn && !offDay && notif.lastSent !== date) {
         const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily-' + date }, env);
         if (ok > 0) { notif.lastSent = date; changed = true; sent++; }
       }

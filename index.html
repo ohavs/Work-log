@@ -279,6 +279,17 @@
           <!-- כפתור בדיקת התראה — הוסתר מה-UI לאחר שאומת שהמערכת עובדת. הקוד נשמר; להחזרה, בטל את ההערה כאן (וב-app.js binding של testReminderBtn).
           <button type="button" class="btn ghost-line" id="testReminderBtn"><span data-ic="bell"></span> שליחת התראת בדיקה</button>
           -->
+          <span class="field-label sub-label">ימים ללא עבודה</span>
+          <div class="chips" id="offDaysChips">
+            <button type="button" data-day="0">א׳</button>
+            <button type="button" data-day="1">ב׳</button>
+            <button type="button" data-day="2">ג׳</button>
+            <button type="button" data-day="3">ד׳</button>
+            <button type="button" data-day="4">ה׳</button>
+            <button type="button" data-day="5">ו׳</button>
+            <button type="button" data-day="6">ש׳</button>
+          </div>
+          <p class="form-note">לא תישלח תזכורת יומית בימים שסומנו — גם אם לא נרשמו בהם שעות.</p>
         </div>
 
         <div class="field">

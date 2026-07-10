@@ -246,6 +246,7 @@ html:has(.sheet-backdrop:not([hidden])), body:has(.sheet-backdrop:not([hidden]))
 .form { display: flex; flex-direction: column; gap: 18px; }
 .field { display: flex; flex-direction: column; gap: 9px; }
 .field-label { font-size: 14px; font-weight: 700; padding-inline-start: 2px; }
+.field-label.sub-label { margin-top: 5px; } /* extra separation from an unrelated control above it, within the same .field */
 .field-label em { font-style: normal; font-weight: 500; color: var(--muted-fg); }
 .time-grid { display: flex; gap: 12px; }
 .time-grid .field { flex: 1; }
