@@ -313,6 +313,16 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .switch input:checked + .knob { background: var(--primary); }
 .switch input:checked + .knob::after { transform: translateX(22px); }
 
+.stepper-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--surface-2); border-radius: 14px; padding: 12px 14px; font-weight: 700; }
+.stepper-row + .stepper-row { margin-top: 10px; }
+.stepper-label { font-size: 14px; }
+.stepper { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.stepper-btn { width: 32px; height: 32px; border-radius: 50%; background: var(--surface); box-shadow: var(--shadow-sm); font-size: 19px; font-weight: 800; color: var(--primary); display: grid; place-items: center; line-height: 1; transition: transform .12s, opacity .15s; }
+.stepper-btn:active { transform: scale(.88); background: var(--primary-soft); }
+.stepper-btn:disabled { opacity: .35; }
+.stepper-val { min-width: 46px; text-align: center; font-size: 15px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.stepper-val b { font-size: 17px; }
+
 .btn { width: 100%; padding: 16px; border-radius: 15px; font-size: 16px; font-weight: 800; transition: transform .15s, opacity .2s; }
 .btn.big { padding: 18px; font-size: 18px; }
 .btn:active { transform: scale(.98); }

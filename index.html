@@ -294,10 +294,25 @@
 
         <div class="field">
           <span class="field-label">שכחתי לצאת <em>(משמרת פתוחה זמן רב)</em></span>
-          <div class="time-grid">
-            <div class="input-wrap"><input type="number" id="sShiftRemind" min="1" max="23" step="1" inputmode="numeric" value="9" /><span class="input-suffix">תזכורת אחרי (ש׳)</span></div>
-            <div class="input-wrap"><input type="number" id="sShiftMax" min="2" max="24" step="1" inputmode="numeric" value="12" /><span class="input-suffix">סגירה אחרי (ש׳)</span></div>
+
+          <div class="stepper-row">
+            <span class="stepper-label">תזכורת שעדיין במשמרת</span>
+            <div class="stepper" data-target="sShiftRemind" data-min="1" data-max="23">
+              <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
+              <span class="stepper-val"><b id="sShiftRemindVal">9</b> ש׳</span>
+              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+            </div>
           </div>
+          <div class="stepper-row">
+            <span class="stepper-label">סגירה אוטומטית של המשמרת</span>
+            <div class="stepper" data-target="sShiftMax" data-min="2" data-max="24">
+              <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
+              <span class="stepper-val"><b id="sShiftMaxVal">12</b> ש׳</span>
+              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+            </div>
+          </div>
+          <input type="hidden" id="sShiftRemind" value="9" />
+          <input type="hidden" id="sShiftMax" value="12" />
           <p class="form-note">אם נשארת “בכניסה” — נשלח תזכורת אחרי מספר השעות הראשון, והמשמרת תיסגר אוטומטית אחרי השני (ותוגבל לאותו משך).</p>
         </div>
 

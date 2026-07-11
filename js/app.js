@@ -579,6 +579,9 @@ function serializeSettingsForm() {
   return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, od: [...offDaysPick].sort() });
 }
 function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
+// The "שכחתי לצאת" hours are edited with a −/+ stepper, backed by a hidden
+// input (id) that holds the actual value; the visible number lives in #{id}Val.
+function setStepper(id, val) { $(id).value = val; $(`${id}Val`).textContent = val; }
 function renderOffDaysChips() {
   $('offDaysChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', offDaysPick.includes(Number(b.dataset.day))));
 }
@@ -593,8 +596,8 @@ function openSettings() {
   $('sReminder').checked = !!s.reminder;
   $('sReminderTimeText').textContent = reminderPick;
   $('reminderTimeField').hidden = !s.reminder;
-  $('sShiftRemind').value = s.shiftRemindHours || 9;
-  $('sShiftMax').value = s.shiftMaxHours || 12;
+  setStepper('sShiftRemind', s.shiftRemindHours || 9);
+  setStepper('sShiftMax', s.shiftMaxHours || 12);
   offDaysPick = Array.isArray(s.offDays) ? [...s.offDays] : [];
   renderOffDaysChips();
   renderPaletteRow();
@@ -1647,6 +1650,18 @@ function bind() {
     const d = Number(b.dataset.day);
     offDaysPick = offDaysPick.includes(d) ? offDaysPick.filter((x) => x !== d) : [...offDaysPick, d];
     renderOffDaysChips();
+  });
+  // "שכחתי לצאת" −/+ steppers: each keeps its own min/max, and the pair stays
+  // consistent (close-after always ends up strictly greater than remind-after).
+  $('settingsForm').addEventListener('click', (e) => {
+    const btn = e.target.closest('.stepper-btn'); if (!btn) return;
+    const wrap = btn.closest('.stepper');
+    const id = wrap.dataset.target;
+    const min = Number(wrap.dataset.min), max = Number(wrap.dataset.max);
+    const v = Math.min(max, Math.max(min, Number($(id).value) + Number(btn.dataset.step)));
+    setStepper(id, v);
+    if (id === 'sShiftRemind' && v >= Number($('sShiftMax').value)) setStepper('sShiftMax', Math.min(24, v + 1));
+    if (id === 'sShiftMax' && v <= Number($('sShiftRemind').value)) setStepper('sShiftRemind', Math.max(1, v - 1));
   });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
