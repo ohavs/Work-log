@@ -572,10 +572,11 @@ function onSwipeEnd() {
 
 // ------------------------------------------------------------------ settings
 let settingsFormSnapshot = '';
-// Only the fields deferred to the "שמירה" submit — theme/palette/reminder-toggle
-// already save immediately on change, so closing the sheet never loses them.
+// Only the fields deferred to the "שמירה" submit — theme/palette/reminder-toggle/
+// reminder-time already save immediately on change, so closing the sheet never
+// loses them.
 function serializeSettingsForm() {
-  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, rt: reminderPick, od: [...offDaysPick].sort() });
+  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, od: [...offDaysPick].sort() });
 }
 function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
 function renderOffDaysChips() {
@@ -1629,7 +1630,18 @@ function bind() {
   $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); else unsubscribePush(); });
   // כפתור בדיקת התראה מוסתר מה-UI (הקוד נשמר); מקשרים רק אם הוא קיים.
   { const b = $('testReminderBtn'); if (b) b.onclick = sendTestReminder; }
-  $('sReminderTime').onclick = () => openTimePicker({ title: 'שעת התזכורת', value: reminderPick, onConfirm: (v) => { reminderPick = v; $('sReminderTimeText').textContent = v; } });
+  // Saves immediately on confirm (like the theme/reminder toggles beside it) —
+  // no need to also press "שמירה" below for this field, so there's no
+  // ambiguity about whether the picked time was kept.
+  $('sReminderTime').onclick = () => openTimePicker({
+    title: 'שעת התזכורת', value: reminderPick,
+    onConfirm: (v) => {
+      reminderPick = v; $('sReminderTimeText').textContent = v;
+      store.saveSettings({ reminderTime: v });
+      settingsFormSnapshot = serializeSettingsForm();
+      toast('שעת התזכורת עודכנה ✓');
+    },
+  });
   $('offDaysChips').addEventListener('click', (e) => {
     const b = e.target.closest('button[data-day]'); if (!b) return;
     const d = Number(b.dataset.day);
