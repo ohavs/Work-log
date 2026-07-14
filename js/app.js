@@ -97,23 +97,43 @@ function setActive(v) {
 // A shift left open for 12h is capped at 12h and closed automatically; the
 // created entry is flagged for review and surfaced via a home-screen banner.
 // Runs on launch (catches a shift the app slept through) and live while open.
+//
+// REENTRANCY GUARD: store.addEntry()/setActive() below both synchronously
+// emit a store change, which re-renders the hero, which re-checks whether
+// the active shift is still >=12h old — and since setActive(null) hasn't
+// run yet at that point, without this guard it would call autoCloseActive()
+// again from inside itself, forever, each call creating another duplicate
+// entry. This is exactly what happened in production: one stuck shift
+// produced 1000+ duplicate entries in seconds before the call stack
+// overflowed. Never remove this guard.
+let autoClosing = false;
 function autoCloseActive(active) {
+  if (autoClosing) return null;
   active = active || getActive();
   if (!active) return null;
-  const startD = new Date(active.start);
-  const endD = new Date(active.start + autoCloseMs());
-  const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
-  // Add the entry before clearing the active shift — same ordering fix as
-  // punch(): clearing first would leave a synchronous instant with neither an
-  // entry nor an active shift, wrongly triggering the daily reminder.
-  const created = store.addEntry(entry);
-  setActive(null);
-  try { localStorage.setItem(AUTOCLOSE_KEY, created.id); } catch {}
-  viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
-  showLocalNotification('המשמרת נסגרה אוטומטית', 'עברו 12 שעות — סגרנו את המשמרת. שכחת יציאה? הקש לתיקון', 'wl-autoclose');
-  renderMonth(); renderAll(); renderMore(); renderHero();
-  toast('משמרת ארוכה נסגרה אוטומטית אחרי 12 שעות · בדקו אותה');
-  return created;
+  autoClosing = true;
+  try {
+    const startD = new Date(active.start);
+    const endD = new Date(active.start + autoCloseMs());
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
+    const created = store.addEntry(entry);
+    if (!created) {
+      // Daily cap already reached (2 work shifts today) — leave the active
+      // shift untouched rather than silently discarding it; the user must
+      // resolve the existing entries for today before it can be closed.
+      toast('לא ניתן לסגור אוטומטית — כבר יש 2 משמרות רשומות היום. ערכו/מחקו רישום קיים כדי לפתור.');
+      return null;
+    }
+    setActive(null);
+    try { localStorage.setItem(AUTOCLOSE_KEY, created.id); } catch {}
+    viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
+    showLocalNotification('המשמרת נסגרה אוטומטית', 'עברו 12 שעות — סגרנו את המשמרת. שכחת יציאה? הקש לתיקון', 'wl-autoclose');
+    renderMonth(); renderAll(); renderMore(); renderHero();
+    toast('משמרת ארוכה נסגרה אוטומטית אחרי 12 שעות · בדקו אותה');
+    return created;
+  } finally {
+    autoClosing = false;
+  }
 }
 
 function renderAutoCloseBanner() {
@@ -182,8 +202,16 @@ function punch() {
     // entry didn't exist yet at that instant, it would look like "nothing
     // logged, not clocked in" and fire a false "you forgot to log hours" alert
     // right at clock-out.
+    const created = store.addEntry(entry);
+    if (!created) {
+      // Daily cap reached (2 work shifts already logged today) — keep the
+      // active shift running rather than discard the worked time; the user
+      // must edit/delete an existing entry for today before clocking out.
+      toast('כבר יש 2 משמרות רשומות היום — לא ניתן להוסיף עוד. ערכו/מחקו רישום קיים כדי לצאת.');
+      return;
+    }
+    lastCreatedId = created.id;
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
-    const created = store.addEntry(entry); lastCreatedId = created.id;
     setActive(null);
     renderMonth(); renderHero();
     toast(`נשמר · ${fmtHours(workedMinutes(entry))} שעות · הקש על הרישום לעריכה`);
@@ -502,8 +530,13 @@ function submitEntry(ev) {
   } else {
     data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
   }
-  if (editingId) { clearAutoCloseFlag(editingId); store.updateEntry(editingId, data); toast('הרישום עודכן'); }
-  else { const c = store.addEntry(data); lastCreatedId = c.id; toast('הרישום נוסף'); }
+  if (editingId) {
+    clearAutoCloseFlag(editingId); store.updateEntry(editingId, data); toast('הרישום עודכן');
+  } else {
+    const c = store.addEntry(data);
+    if (!c) { toast('כבר יש 2 משמרות רשומות בתאריך זה — לא ניתן להוסיף עוד. ערכו/מחקו רישום קיים.'); return; }
+    lastCreatedId = c.id; toast('הרישום נוסף');
+  }
   const d = parseDate(date); viewYear = d.getFullYear(); viewMonth = d.getMonth();
   renderMonth();
   formSnapshot = serializeForm(); // mark clean so no unsaved prompt

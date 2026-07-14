@@ -1,6 +1,13 @@
 // Data layer: localStorage by default, Firebase (Firestore + Google auth) when configured.
 import { firebaseConfig, firebaseEnabled } from './config.js';
-import { uid } from './util.js';
+import { uid, isWork } from './util.js';
+
+// Hard safety cap: a runaway bug (or any other malfunction) must never be
+// able to flood a single day with duplicate shifts again. No legitimate
+// workflow needs a 3rd work shift on the same date — enforced centrally
+// here so every entry-creation path (manual entry, clock-out, auto-close)
+// is covered without relying on each call site to remember to check.
+const MAX_WORK_ENTRIES_PER_DAY = 2;
 
 const LS_ENTRIES = 'wl_entries';
 const LS_SETTINGS = 'wl_settings';
@@ -284,7 +291,13 @@ class Store {
   }
 
   // ---- mutations ----
+  // Returns the created entry, or null if it was refused by the daily cap
+  // (MAX_WORK_ENTRIES_PER_DAY) — callers must handle the null case.
   addEntry(data) {
+    if (isWork(data)) {
+      const sameDay = this.entries.filter((e) => e.date === data.date && isWork(e)).length;
+      if (sameDay >= MAX_WORK_ENTRIES_PER_DAY) return null;
+    }
     const now = Date.now();
     const entry = { id: uid(), created: now, ...data, updated: now };
     this.entries.push(entry);
