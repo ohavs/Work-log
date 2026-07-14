@@ -321,6 +321,18 @@ class Store {
     this._emit();
   }
 
+  // Batched multi-delete (e.g. "select several shifts / a whole day and
+  // remove them") — a single persist+emit instead of one per id.
+  deleteEntries(ids) {
+    const set = new Set(ids);
+    if (!set.size) return;
+    const now = Date.now();
+    this.entries = this.entries.filter((e) => !set.has(e.id));
+    set.forEach((id) => { this.tombstones.e[id] = now; });
+    this._persist();
+    this._emit();
+  }
+
   saveSettings(data) {
     this.settings = { ...this.settings, ...data };
     this._settingsTs = Date.now();

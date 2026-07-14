@@ -180,6 +180,8 @@ svg { display: block; }
 .list-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; padding: 0 2px; }
 .list-head h2 { font-size: 18px; }
 .list-count { font-size: 13px; color: var(--muted-fg); }
+.list-head-btns { display: flex; gap: 8px; }
+.select-toggle.on { background: var(--primary); color: #fff; }
 
 .entries { display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
@@ -192,6 +194,38 @@ svg { display: block; }
 .swipe-del svg { width: 22px; height: 22px; }
 .swipe-del:active { filter: brightness(.92); }
 .entry { display: flex; align-items: center; gap: 14px; background: var(--surface); border-radius: var(--radius-sm); padding: 16px; box-shadow: var(--shadow-sm); cursor: pointer; }
+.entry.selected { box-shadow: 0 0 0 2px var(--primary), var(--shadow-sm); background: var(--primary-soft); }
+
+/* selection-mode checkboxes: shared circle style for both the per-day
+   "select all" toggle and each entry's own selection marker. */
+.sel-check { flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; color: transparent; background: var(--surface); transition: background .15s, border-color .15s, color .15s, transform .12s; }
+.sel-check:active { transform: scale(.9); }
+.sel-check svg { width: 14px; height: 14px; }
+.sel-check.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.day-head .sel-check { width: 20px; height: 20px; }
+.day-head .sel-check svg { width: 12px; height: 12px; }
+.swipe-wrap.select-mode { display: flex; align-items: center; gap: 10px; overflow: visible; }
+.swipe-wrap.select-mode .entry { flex: 1; cursor: pointer; }
+
+.select-bar {
+  position: fixed; z-index: 36;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  left: 50%; transform: translateX(-50%);
+  width: min(440px, calc(100% - 28px));
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 16px 8px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+}
+.select-cancel { flex: 0 0 auto; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--muted-fg); background: var(--surface-2); }
+.select-cancel svg { width: 18px; height: 18px; }
+.select-count { flex: 1; font-weight: 800; font-size: 14px; }
+.select-delete { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; padding: 11px 18px; border-radius: 999px; background: var(--danger); color: #fff; font-weight: 800; font-size: 14px; transition: opacity .2s, transform .15s; }
+.select-delete:active { transform: scale(.95); }
+.select-delete[disabled] { opacity: .4; pointer-events: none; }
+.select-delete svg { width: 16px; height: 16px; }
 .swipe-wrap .entry { position: relative; transition: transform .22s cubic-bezier(.2,.8,.2,1); touch-action: pan-y; }
 .swipe-wrap.open .entry { transform: translateX(76px); }
 .entry.flash { animation: flash 1.6s ease; }

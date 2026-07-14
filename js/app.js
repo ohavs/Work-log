@@ -35,6 +35,8 @@ let jobFilter = null;       // null = all workplaces; else jobId
 let editingJobId = null;
 let tick = null;
 let lastCreatedId = null;
+let selectMode = false;           // entries list: multi-select mode for bulk deletion
+let selectedIds = new Set();      // entry ids currently selected
 let reminderPick = '18:00';       // chosen time in the settings picker
 let offDaysPick = [];             // chosen non-work weekdays (0=Sunday..6=Saturday) in the settings sheet
 let reminderNotifiedFor = '';     // ISO date we already notified for
@@ -240,6 +242,7 @@ function renderMonth() {
   const mo = $('moMonthName'); if (mo) mo.textContent = t;
 }
 function shiftMonth(delta) {
+  if (selectMode) exitSelectMode(); // don't carry a stale selection across months
   viewMonth += delta;
   if (viewMonth < 0) { viewMonth = 11; viewYear--; }
   if (viewMonth > 11) { viewMonth = 0; viewYear++; }
@@ -334,9 +337,12 @@ function renderEntries(entries) {
     const dayMin = list.reduce((s, e) => s + workedMinutes(e), 0);
     const group = document.createElement('div');
     group.className = 'day-group';
-    group.innerHTML = `<div class="day-head"><span class="dow">יום ${DOW[d.getDay()]}</span><span>${d.getDate()} ב${MONTHS[d.getMonth()]}</span>${dayMin > 0 ? `<span class="dtotal">${fmtHours(dayMin)} שעות</span>` : ''}</div>`;
+    const daySelected = selectMode && list.every((e) => selectedIds.has(e.id));
+    const daySelHtml = selectMode ? `<span class="sel-check day-sel${daySelected ? ' on' : ''}" data-date="${date}" aria-label="בחירת כל היום">${daySelected ? svg('check') : ''}</span>` : '';
+    group.innerHTML = `<div class="day-head">${daySelHtml}<span class="dow">יום ${DOW[d.getDay()]}</span><span>${d.getDate()} ב${MONTHS[d.getMonth()]}</span>${dayMin > 0 ? `<span class="dtotal">${fmtHours(dayMin)} שעות</span>` : ''}</div>`;
     list.forEach((e) => {
       const sw = document.createElement('div'); sw.className = 'swipe-wrap'; sw.dataset.id = e.id;
+      if (selectMode) sw.classList.add('select-mode');
       const del = document.createElement('button'); del.className = 'swipe-del'; del.type = 'button'; del.setAttribute('aria-label', 'מחיקה'); del.innerHTML = svg('trash');
       const card = document.createElement('div'); card.dataset.id = e.id;
       const t = entryType(e);
@@ -354,7 +360,15 @@ function renderEntries(entries) {
         card.className = 'entry';
         card.innerHTML = `<div class="entry-time"><span class="big">${fmtHours(mins)}</span><span class="unit">שעות</span></div><div class="entry-main"><span class="entry-range">${e.start} – ${e.end}</span><span class="entry-meta">${meta.join(' · ') || '&nbsp;'}</span></div>${r ? `<span class="entry-pay">${fmtMoney(pay, store.settings.currency)}</span>` : `<span class="entry-edit">${svg('pencil')}</span>`}`;
       }
-      sw.appendChild(del); sw.appendChild(card);
+      if (selectMode) {
+        const selected = selectedIds.has(e.id);
+        card.classList.toggle('selected', selected);
+        const chk = document.createElement('span'); chk.className = `sel-check entry-sel${selected ? ' on' : ''}`; chk.innerHTML = selected ? svg('check') : '';
+        sw.appendChild(chk);
+      } else {
+        sw.appendChild(del);
+      }
+      sw.appendChild(card);
       group.appendChild(sw);
     });
     wrap.appendChild(group);
@@ -367,6 +381,39 @@ function renderEntries(entries) {
 }
 
 function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderEntries(e); }
+
+// ------------------------------------------------------------------ bulk selection / delete
+function updateSelectBar() {
+  $('selectBar').hidden = !selectMode;
+  $('bottomNav').hidden = selectMode;
+  $('selectCount').textContent = `${selectedIds.size} נבחרו`;
+  $('selectDeleteBtn').disabled = selectedIds.size === 0;
+  $('selectModeBtn').classList.toggle('on', selectMode);
+  $('addBtn').hidden = selectMode;
+}
+function enterSelectMode() { selectMode = true; selectedIds.clear(); renderAll(); updateSelectBar(); }
+function exitSelectMode() { selectMode = false; selectedIds.clear(); closeSwipe(); renderAll(); updateSelectBar(); }
+function toggleEntrySelection(id) {
+  if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
+  renderAll(); updateSelectBar();
+}
+function toggleDaySelection(date) {
+  const ids = monthEntries().filter((e) => e.date === date).map((e) => e.id);
+  const allSelected = ids.length > 0 && ids.every((id) => selectedIds.has(id));
+  ids.forEach((id) => { if (allSelected) selectedIds.delete(id); else selectedIds.add(id); });
+  renderAll(); updateSelectBar();
+}
+async function deleteSelectedEntries() {
+  const n = selectedIds.size;
+  if (!n) return;
+  const ok = await showConfirm({ title: `למחוק ${n} רישומים?`, message: 'לא ניתן לשחזר לאחר המחיקה.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
+  if (!ok) return;
+  store.deleteEntries([...selectedIds]);
+  const deletedId = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })();
+  if (deletedId && selectedIds.has(deletedId)) clearAutoCloseFlag(deletedId);
+  toast(`${n} רישומים נמחקו`);
+  exitSelectMode();
+}
 
 // ------------------------------------------------------------------ sheets
 function openSheet(s) { s.hidden = false; }
@@ -570,6 +617,7 @@ const SWIPE_W = 76; // width of the revealed delete button
 let swipe = null;   // active drag state
 let swipeSuppressUntil = 0; // ignore the click that trails a real swipe
 function onSwipeStart(ev) {
+  if (selectMode) return; // selection mode replaces swipe-to-delete with tap-to-select
   const sw = ev.target.closest('.swipe-wrap');
   if (!sw || ev.target.closest('.swipe-del')) return;
   const t = ev.touches[0];
@@ -653,7 +701,7 @@ function renderJobFilter() {
     : '';
   ['jobFilterR', 'jobFilterM'].forEach((id) => { const el = $(id); if (el) { el.innerHTML = html; el.hidden = jobs.length === 0; } });
 }
-function setJobFilter(id) { jobFilter = id || null; renderJobFilter(); renderAll(); renderMore(); }
+function setJobFilter(id) { if (selectMode) exitSelectMode(); jobFilter = id || null; renderJobFilter(); renderAll(); renderMore(); }
 
 function renderJobsList() {
   const jobs = jobsList(), el = $('jobsList');
@@ -1708,6 +1756,13 @@ function bind() {
 
   const entriesEl = $('entries');
   entriesEl.addEventListener('click', (e) => {
+    if (selectMode) {
+      const daySel = e.target.closest('.day-sel');
+      if (daySel) { toggleDaySelection(daySel.dataset.date); return; }
+      const wrap = e.target.closest('.swipe-wrap');
+      if (wrap) toggleEntrySelection(wrap.dataset.id);
+      return;
+    }
     const delBtn = e.target.closest('.swipe-del');
     if (delBtn) { const sw = delBtn.closest('.swipe-wrap'); if (sw) deleteEntryById(sw.dataset.id); return; }
     if (Date.now() < swipeSuppressUntil) return;      // trailing click after a swipe
@@ -1716,6 +1771,9 @@ function bind() {
     const card = e.target.closest('.entry');
     if (card) openEntry(card.dataset.id);
   });
+  $('selectModeBtn').onclick = () => { selectMode ? exitSelectMode() : enterSelectMode(); };
+  $('selectCancel').onclick = exitSelectMode;
+  $('selectDeleteBtn').onclick = deleteSelectedEntries;
   entriesEl.addEventListener('touchstart', onSwipeStart, { passive: true });
   entriesEl.addEventListener('touchmove', onSwipeMove, { passive: false });
   entriesEl.addEventListener('touchend', onSwipeEnd);

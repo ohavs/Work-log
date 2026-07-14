@@ -89,7 +89,10 @@
 
       <div class="list-head">
         <h2>רישומים <span class="list-count" id="listCount"></span></h2>
-        <button class="add-inline" id="addBtn"><span data-ic="plus"></span> הוספה</button>
+        <div class="list-head-btns">
+          <button class="add-inline select-toggle" id="selectModeBtn"><span data-ic="check"></span> בחירה</button>
+          <button class="add-inline" id="addBtn"><span data-ic="plus"></span> הוספה</button>
+        </div>
       </div>
       <div class="entries" id="entries"></div>
       <div class="empty" id="emptyState" hidden>
@@ -140,6 +143,12 @@
     <button class="nav-item" data-view="viewNotes"><span class="nav-ic" data-ic="notebook"></span><span class="nav-label">פנקס</span></button>
     <button class="nav-item" data-view="viewMore"><span class="nav-ic" data-ic="grid"></span><span class="nav-label">עוד</span></button>
   </nav>
+
+  <div class="select-bar" id="selectBar" hidden>
+    <button type="button" class="select-cancel" id="selectCancel" aria-label="ביטול בחירה"><span data-ic="x"></span></button>
+    <span class="select-count" id="selectCount">0 נבחרו</span>
+    <button type="button" class="select-delete" id="selectDeleteBtn" disabled><span data-ic="trash"></span> מחיקה</button>
+  </div>
 
   <!-- ============ Entry editor sheet ============ -->
   <div class="sheet-backdrop" id="entrySheet" hidden>
