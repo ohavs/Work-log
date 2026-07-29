@@ -391,9 +391,28 @@
 
         <div class="field">
           <span class="field-label">תזכורת <em>(לא חובה)</em></span>
-          <div class="remind-row">
-            <button type="button" class="picker-field" id="nRemindBtn"><span class="pf-ic" data-ic="bell"></span><span id="nRemindText">ללא תזכורת</span></button>
-            <button type="button" class="row-del" id="nRemindClear" aria-label="ביטול תזכורת" hidden></button>
+          <div class="seg" id="nRemindMode" role="tablist">
+            <button type="button" data-mode="none" class="on">ללא</button>
+            <button type="button" data-mode="once">חד־פעמית</button>
+            <button type="button" data-mode="weekly">קבועה</button>
+          </div>
+
+          <div class="remind-panel" id="nRemindOnce" hidden>
+            <button type="button" class="picker-field" id="nRemindBtn"><span class="pf-ic" data-ic="bell"></span><span id="nRemindText">בחירת תאריך ושעה</span></button>
+          </div>
+
+          <div class="remind-panel" id="nRemindWeekly" hidden>
+            <div class="chips" id="nRemindDays">
+              <button type="button" data-day="0">א׳</button>
+              <button type="button" data-day="1">ב׳</button>
+              <button type="button" data-day="2">ג׳</button>
+              <button type="button" data-day="3">ד׳</button>
+              <button type="button" data-day="4">ה׳</button>
+              <button type="button" data-day="5">ו׳</button>
+              <button type="button" data-day="6">ש׳</button>
+            </div>
+            <button type="button" class="picker-field" id="nRemindWeeklyTime"><span class="pf-ic" data-ic="clock"></span><span id="nRemindWeeklyTimeText">18:00</span></button>
+            <p class="form-note" id="nRemindWeeklyNext"></p>
           </div>
         </div>
 

@@ -282,8 +282,9 @@ html:has(.sheet-backdrop:not([hidden])), body:has(.sheet-backdrop:not([hidden]))
 .field-label { font-size: 14px; font-weight: 700; padding-inline-start: 2px; }
 .field-label.sub-label { margin-top: 10px; padding-top: 16px; border-top: 1px solid var(--border); } /* visually separates an unrelated sub-section within the same .field */
 /* day-of-week row: never let 7 chips overflow the sheet on narrow screens */
-#offDaysChips { gap: 6px; }
-#offDaysChips button { flex: 1 1 0; min-width: 0; padding: 11px 2px; font-size: 13px; }
+#offDaysChips, #nRemindDays { gap: 6px; }
+#offDaysChips button, #nRemindDays button { flex: 1 1 0; min-width: 0; padding: 11px 2px; font-size: 13px; }
+.remind-panel { display: flex; flex-direction: column; gap: 9px; margin-top: 9px; }
 .field-label em { font-style: normal; font-weight: 500; color: var(--muted-fg); }
 .time-grid { display: flex; gap: 12px; }
 .time-grid .field { flex: 1; }

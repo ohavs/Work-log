@@ -45,7 +45,7 @@ let noteFilter = null;            // null = all categories; else category id (or
 let noteQuery = '';               // search text
 let editingNoteId = null;
 let editingCatId = null;
-let noteDraft = { fields: [], checklist: [], tags: [] }; // working copy while editing
+let noteDraft = { fields: [], checklist: [], tags: [], remind: null }; // working copy while editing
 let catPick = 'teal';             // chosen swatch in the category editor
 let formSnapshot = '';
 
@@ -1215,14 +1215,14 @@ function cardDetailed(n) {
     ${fields ? `<div class="note-fields">${fields}</div>` : ''}
     ${total ? `<div class="note-progress"><div class="np-track"><div class="np-fill" style="width:${pct}%"></div></div><span class="np-label">${svg('check')} ${done}/${total}</span></div>` : ''}
     ${tags ? `<div class="note-tags">${tags}</div>` : ''}
-    <div class="note-foot">${n.remindAt && n.remindAt > Date.now() ? `<span class="note-remind">${svg('bell')}${fmtRemind(n.remindAt)}</span>` : '<span></span>'}<span class="note-date">עודכן ${relTime(n.updated)}</span></div>
+    <div class="note-foot">${effectiveRemindAt(n) > Date.now() ? `<span class="note-remind">${svg('bell')}${fmtRemindRule(n)}</span>` : '<span></span>'}<span class="note-date">עודכן ${relTime(n.updated)}</span></div>
   </article>`;
 }
 function cardCompact(n) {
   const col = catColor(n.category);
   const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
   const badges = [];
-  if (n.remindAt && n.remindAt > Date.now()) badges.push(`<span class="nb remind">${svg('bell')}</span>`);
+  if (effectiveRemindAt(n) > Date.now()) badges.push(`<span class="nb remind">${svg('bell')}</span>`);
   if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
   if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
   const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · ');
@@ -1257,10 +1257,14 @@ function renderNotes() {
 
   // upcoming reminders overview (only in the default, unfiltered view)
   if (noteFilter === null && !noteQuery.trim()) {
-    const upcoming = notesAll().filter((n) => n.remindAt && n.remindAt > Date.now()).sort((a, b) => a.remindAt - b.remindAt);
+    const upcoming = notesAll()
+      .map((n) => ({ n, at: effectiveRemindAt(n) }))
+      .filter((x) => x.at && x.at > Date.now())
+      .sort((a, b) => a.at - b.at)
+      .map((x) => x.n);
     if (upcoming.length) {
       html += `<div class="notes-section"><div class="notes-sec-head">${svg('bell')}<span>תזכורות קרובות</span></div><div class="upcoming-list">` +
-        upcoming.map((n) => `<button type="button" class="upcoming-item" data-id="${n.id}">${svg('bell')}<span class="up-title">${escapeHtml(n.title || 'ללא כותרת')}</span><span class="up-time">${fmtRemind(n.remindAt)}</span></button>`).join('') +
+        upcoming.map((n) => `<button type="button" class="upcoming-item" data-id="${n.id}">${svg('bell')}<span class="up-title">${escapeHtml(n.title || 'ללא כותרת')}</span><span class="up-time">${fmtRemindRule(n)}</span></button>`).join('') +
         `</div></div>`;
     }
   }
@@ -1302,7 +1306,7 @@ function openNoteView(id) {
     ${fields ? `<div class="nv-fields">${fields}</div>` : ''}
     ${checklist ? `<div class="nv-checklist">${checklist}</div>` : ''}
     ${tags ? `<div class="note-tags nv-tags">${tags}</div>` : ''}
-    ${n.remindAt && n.remindAt > Date.now() ? `<div class="nv-remind">${svg('bell')}<span>תזכורת: ${fmtRemind(n.remindAt)}</span></div>` : ''}
+    ${effectiveRemindAt(n) > Date.now() ? `<div class="nv-remind">${svg('bell')}<span>תזכורת: ${fmtRemindRule(n)}</span></div>` : ''}
     <div class="nv-meta">עודכן ${relTime(n.updated)}${n.created && n.created !== n.updated ? ` · נוצר ${relTime(n.created)}` : ''}</div>`;
   openSheet($('noteViewSheet'));
 }
@@ -1360,13 +1364,16 @@ function openNote(id = null) {
     $('nTitle').value = n.title || '';
     $('nBody').value = n.body || '';
     $('nPin').checked = !!n.pinned;
-    noteDraft = { fields: (n.fields || []).map((f) => ({ ...f })), checklist: (n.checklist || []).map((c) => ({ ...c })), tags: [...(n.tags || [])], remindAt: n.remindAt || null };
+    // remind: { mode:'once', at } | { mode:'weekly', days:[0-6], time:'HH:MM' } | null.
+    // Older notes only have a plain remindAt timestamp — treat that as a one-time rule.
+    const remind = n.remind || (n.remindAt ? { mode: 'once', at: n.remindAt } : null);
+    noteDraft = { fields: (n.fields || []).map((f) => ({ ...f })), checklist: (n.checklist || []).map((c) => ({ ...c })), tags: [...(n.tags || [])], remind: remind ? { ...remind, days: remind.days ? [...remind.days] : undefined } : null };
     setNoteCat(n.category || '');
     del.hidden = false;
   } else {
     $('noteSheetTitle').textContent = 'פתק חדש';
     $('nTitle').value = ''; $('nBody').value = ''; $('nPin').checked = false;
-    noteDraft = { fields: [], checklist: [], tags: [], remindAt: null };
+    noteDraft = { fields: [], checklist: [], tags: [], remind: null };
     setNoteCat(noteFilter && noteFilter !== '__none' ? noteFilter : '');
     del.hidden = true;
   }
@@ -1389,13 +1396,78 @@ function fmtRemind(ts) {
   if (sameDay(d, tom)) return `מחר ${t}`;
   return `${d.getDate()} ב${MONTHS[d.getMonth()]}, ${t}`;
 }
+// Next future Date a weekly rule (days 0-6 + "HH:MM") fires, or null if no days chosen.
+function nextRecurrence(days, time) {
+  if (!Array.isArray(days) || !days.length || !time) return null;
+  const [h, m] = time.split(':').map(Number);
+  const now = new Date();
+  for (let i = 0; i < 8; i++) {
+    const d = new Date(now); d.setDate(now.getDate() + i); d.setHours(h, m, 0, 0);
+    if (days.includes(d.getDay()) && d.getTime() > now.getTime()) return d;
+  }
+  return null;
+}
+// A note's reminder rule, normalized — reads either the new `remind` object
+// or falls back to a legacy plain `remindAt` timestamp as a one-time rule.
+function remindRuleOf(n) { return n.remind || (n.remindAt ? { mode: 'once', at: n.remindAt } : null); }
+// The single timestamp used for display/sorting/badges: the note's own time
+// for a one-time reminder, or its next upcoming occurrence for a weekly one.
+function effectiveRemindAt(n) {
+  const r = remindRuleOf(n);
+  if (!r) return null;
+  if (r.mode === 'once') return r.at || null;
+  if (r.mode === 'weekly') { const d = nextRecurrence(r.days, r.time); return d ? d.getTime() : null; }
+  return null;
+}
+function dayShort(d) { return ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'][d]; }
+// Display text for a note's reminder, wherever it's shown (card/badge/view/upcoming list).
+function fmtRemindRule(n) {
+  const r = remindRuleOf(n);
+  if (!r) return '';
+  if (r.mode === 'once') return r.at ? fmtRemind(r.at) : '';
+  if (r.mode === 'weekly' && Array.isArray(r.days) && r.days.length) return `${[...r.days].sort().map(dayShort).join(',')} · ${r.time}`;
+  return '';
+}
 function renderNoteRemind() {
-  const has = !!noteDraft.remindAt;
-  $('nRemindText').textContent = has ? fmtRemind(noteDraft.remindAt) : 'ללא תזכורת';
-  $('nRemindBtn').classList.toggle('set', has);
-  $('nRemindClear').hidden = !has;
+  const r = noteDraft.remind;
+  const mode = r ? r.mode : 'none';
+  $('nRemindMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === mode));
+  $('nRemindOnce').hidden = mode !== 'once';
+  $('nRemindWeekly').hidden = mode !== 'weekly';
+  if (mode === 'once') {
+    $('nRemindText').textContent = r.at ? fmtRemind(r.at) : 'בחירת תאריך ושעה';
+  } else if (mode === 'weekly') {
+    $('nRemindDays').querySelectorAll('button').forEach((b) => b.classList.toggle('on', (r.days || []).includes(Number(b.dataset.day))));
+    $('nRemindWeeklyTimeText').textContent = r.time || '18:00';
+    const next = nextRecurrence(r.days, r.time);
+    $('nRemindWeeklyNext').textContent = next ? `התזכורת הבאה: ${fmtRemind(next.getTime())}` : 'בחרו לפחות יום אחד';
+  }
+}
+async function setNoteRemindMode(mode) {
+  if (noteDraft.remind && noteDraft.remind.mode === mode) return;
+  if (mode === 'none') { noteDraft.remind = null; renderNoteRemind(); return; }
+  const perm = await requestNotifyPermission();
+  if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
+  subscribePush(); // register this device so the reminder can be delivered
+  noteDraft.remind = mode === 'once' ? { mode: 'once', at: null } : { mode: 'weekly', days: [], time: '18:00' };
+  renderNoteRemind();
+}
+function toggleNoteRemindDay(day) {
+  if (!noteDraft.remind || noteDraft.remind.mode !== 'weekly') return;
+  const days = noteDraft.remind.days || [];
+  noteDraft.remind.days = days.includes(day) ? days.filter((d) => d !== day) : [...days, day];
+  renderNoteRemind();
+}
+function pickNoteReminderWeeklyTime() {
+  openTimePicker({
+    title: 'שעת התזכורת',
+    value: (noteDraft.remind && noteDraft.remind.time) || '18:00',
+    onConfirm: (v) => { noteDraft.remind.time = v; renderNoteRemind(); },
+  });
 }
 function collectNote() {
+  const r = noteDraft.remind;
+  const valid = r && ((r.mode === 'once' && r.at) || (r.mode === 'weekly' && r.days && r.days.length));
   return {
     title: $('nTitle').value.trim(),
     category: currentNoteCat(),
@@ -1404,15 +1476,15 @@ function collectNote() {
     fields: noteDraft.fields.filter((f) => (f.label || '').trim() || (f.value || '').trim()),
     checklist: noteDraft.checklist.filter((c) => (c.text || '').trim()),
     tags: noteDraft.tags,
-    remindAt: noteDraft.remindAt || null,
+    remind: valid ? r : null,
+    // Kept in sync for one-time reminders so the existing display/Worker code
+    // that reads a plain remindAt timestamp keeps working unchanged.
+    remindAt: valid && r.mode === 'once' ? r.at : null,
   };
 }
-async function pickNoteReminder() {
-  const perm = await requestNotifyPermission();
-  if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
-  subscribePush(); // register this device so the reminder can be delivered
+function pickNoteReminder() {
   const p2 = (n) => String(n).padStart(2, '0');
-  const base = noteDraft.remindAt ? new Date(noteDraft.remindAt) : new Date(Date.now() + 3600000);
+  const base = (noteDraft.remind && noteDraft.remind.at) ? new Date(noteDraft.remind.at) : new Date(Date.now() + 3600000);
   openDatePicker({
     title: 'תאריך התזכורת',
     valueISO: `${base.getFullYear()}-${p2(base.getMonth() + 1)}-${p2(base.getDate())}`,
@@ -1423,7 +1495,7 @@ async function pickNoteReminder() {
         const [h, m] = v.split(':').map(Number);
         const d = parseDate(iso); d.setHours(h, m, 0, 0);
         if (d.getTime() <= Date.now()) { toast('הזמן שנבחר כבר עבר'); return; }
-        noteDraft.remindAt = d.getTime();
+        noteDraft.remind = { mode: 'once', at: d.getTime() };
         renderNoteRemind();
       },
     }),
@@ -1634,12 +1706,23 @@ function bind() {
   $('deleteNote').onclick = deleteCurrentNote;
   $('nBody').addEventListener('input', (e) => autoGrow(e.target));
   $('nRemindBtn').onclick = pickNoteReminder;
-  $('nRemindClear').onclick = async () => {
-    const ok = await showConfirm({ title: 'להסיר את התזכורת?', message: 'התזכורת שנקבעה לפתק זה תבוטל.', confirmText: 'הסרה', danger: true, icon: 'trash' });
-    if (!ok) return;
-    noteDraft.remindAt = null; renderNoteRemind();
-  };
-  $('nRemindClear').innerHTML = svg('trash');
+  $('nRemindWeeklyTime').onclick = pickNoteReminderWeeklyTime;
+  $('nRemindDays').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-day]'); if (b) toggleNoteRemindDay(Number(b.dataset.day));
+  });
+  $('nRemindMode').addEventListener('click', async (e) => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return;
+    const mode = b.dataset.mode;
+    const r = noteDraft.remind;
+    if (mode === 'none' && r) {
+      const hasContent = (r.mode === 'once' && r.at) || (r.mode === 'weekly' && r.days && r.days.length);
+      if (hasContent) {
+        const ok = await showConfirm({ title: 'להסיר את התזכורת?', message: 'התזכורת שנקבעה לפתק זה תבוטל.', confirmText: 'הסרה', danger: true, icon: 'trash' });
+        if (!ok) return;
+      }
+    }
+    setNoteRemindMode(mode);
+  });
   $('nCatChips').addEventListener('click', (e) => {
     if (e.target.closest('#newCatChip')) { openCat(null); return; }
     const b = e.target.closest('button[data-cat]'); if (b) setNoteCat(b.dataset.cat);

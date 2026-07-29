@@ -187,6 +187,7 @@ async function run(env) {
     if (!subs.length) continue;
     const notif = await getNotif(token, pid, uid);
     let changed = false;
+    const { date: today, minutes: nowMinutes, dow: todayDow } = localParts(s.tz);
 
     // 1) explicit test
     const testAt = Number(s.pushTestAt) || 0;
@@ -215,7 +216,7 @@ async function run(env) {
       }
     } else if (notif.activeShift) { delete notif.activeShift; changed = true; } // shift ended → clear dedup
 
-    // 3) per-note reminders
+    // 3) per-note reminders — one-time
     const noteState = notif.noteReminders || {};
     for (const nt of (Array.isArray(data.notes) ? data.notes : [])) {
       const at = Number(nt && nt.remindAt) || 0;
@@ -226,17 +227,32 @@ async function run(env) {
       if (ok > 0) { noteState[nt.id] = at; notif.noteReminders = noteState; changed = true; notes++; }
     }
 
+    // 3b) per-note reminders — weekly recurring (settings.tz-local day/time match,
+    // same 90-min send window and once-per-day dedup as the daily reminder below).
+    const noteWeekly = notif.noteWeekly || {};
+    for (const nt of (Array.isArray(data.notes) ? data.notes : [])) {
+      const r = nt && nt.remind;
+      if (!r || r.mode !== 'weekly' || !Array.isArray(r.days) || !r.days.length || !r.time) continue;
+      if (!r.days.includes(todayDow) || noteWeekly[nt.id] === today) continue;
+      const [rh, rm] = String(r.time).split(':').map(Number);
+      const target = (rh || 0) * 60 + (rm || 0);
+      if (nowMinutes < target || nowMinutes >= target + WINDOW_MIN) continue;
+      const title = (nt.title || '').trim() || 'תזכורת';
+      const body = (nt.body || '').trim() || 'יש לך תזכורת בפנקס';
+      const ok = await sendAll(subs, { title, body, tag: 'wl-noteweekly-' + nt.id + '-' + today }, env);
+      if (ok > 0) { noteWeekly[nt.id] = today; notif.noteWeekly = noteWeekly; changed = true; notes++; }
+    }
+
     // 4) daily reminder
     if (s.reminder) {
       const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
       const target = (rh || 0) * 60 + (rm || 0);
-      const { date, minutes, dow } = localParts(s.tz);
-      const logged = (Array.isArray(data.entries) ? data.entries : []).some((e) => e && e.date === date);
+      const logged = (Array.isArray(data.entries) ? data.entries : []).some((e) => e && e.date === today);
       const clockedIn = act && Number(act.start); // an open shift = already clocked in; the daily nag is only to remind clocking IN
-      const offDay = Array.isArray(s.offDays) && s.offDays.includes(dow); // user marked this weekday as a non-work day
-      if (minutes >= target && minutes < target + WINDOW_MIN && !logged && !clockedIn && !offDay && notif.lastSent !== date) {
-        const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily-' + date }, env);
-        if (ok > 0) { notif.lastSent = date; changed = true; sent++; }
+      const offDay = Array.isArray(s.offDays) && s.offDays.includes(todayDow); // user marked this weekday as a non-work day
+      if (nowMinutes >= target && nowMinutes < target + WINDOW_MIN && !logged && !clockedIn && !offDay && notif.lastSent !== today) {
+        const ok = await sendAll(subs, { title: 'שעון עבודה', body: 'עוד לא רשמת שעות היום — הקש כדי להזין', tag: 'wl-daily-' + today }, env);
+        if (ok > 0) { notif.lastSent = today; changed = true; sent++; }
       }
     }
 

@@ -56,6 +56,7 @@ async function run() {
 
     const notifRef = doc.ref.parent.doc('notif');
     const notif = (await notifRef.get()).data() || {};
+    const { date, minutes, dow } = localParts(s.tz);
 
     // 1) explicit test push requested from the app — bypasses time/logged checks
     if (testAt && Date.now() >= testAt && notif.testSent !== testAt) {
@@ -79,11 +80,26 @@ async function run() {
       if (ok > 0) { await notifRef.set({ noteReminders: { [nt.id]: at } }, { merge: true }); sent++; }
     }
 
+    // 2b) per-note reminders — weekly recurring (same send window/dedup style as the daily reminder)
+    const noteWeekly = notif.noteWeekly || {};
+    for (const nt of notes) {
+      const r = nt && nt.remind;
+      if (!r || r.mode !== 'weekly' || !Array.isArray(r.days) || !r.days.length || !r.time) continue;
+      if (!r.days.includes(dow) || noteWeekly[nt.id] === date) continue;
+      const [rh2, rm2] = String(r.time).split(':').map(Number);
+      const target2 = (rh2 || 0) * 60 + (rm2 || 0);
+      if (minutes < target2 || minutes >= target2 + WINDOW_MIN) continue;
+      const title = (nt.title || '').trim() || 'תזכורת';
+      const body = (nt.body || '').trim() || 'יש לך תזכורת בפנקס';
+      const ok = await sendAll(subs, { title, body, tag: 'wl-noteweekly-' + nt.id + '-' + date });
+      console.log(`  → weekly note reminder "${title.slice(0, 20)}" sent to ${ok}/${subs.length}`);
+      if (ok > 0) { await notifRef.set({ noteWeekly: { [nt.id]: date } }, { merge: true }); sent++; }
+    }
+
     // 3) the daily reminder
     if (!s.reminder) continue;
     const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
     const target = (rh || 0) * 60 + (rm || 0);
-    const { date, minutes, dow } = localParts(s.tz);
     if (minutes < target || minutes >= target + WINDOW_MIN) continue; // not in the send window
     if (s.activeShift && Number(s.activeShift.start)) continue;      // already clocked in
     if (Array.isArray(s.offDays) && s.offDays.includes(dow)) continue; // marked as a non-work day
