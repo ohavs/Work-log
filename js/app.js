@@ -260,21 +260,24 @@ function jobsList() { return Array.isArray(store.settings.jobs) ? store.settings
 function jobName(id) { const j = jobsList().find((x) => x.id === id); return j ? j.name : ''; }
 
 function renderStats(entries) {
-  let totalMin = 0, totalPay = 0;
+  let totalMin = 0;
   const workDays = new Set(), vac = new Set(), sick = new Set();
-  const sickHours = payrollOf(store.settings).sickDayHours;
   entries.forEach((e) => {
     const t = entryType(e);
     if (t === 'vacation') { vac.add(e.date); return; }
-    if (t === 'sick') { sick.add(e.date); totalPay += sickHours * effRate(e); return; }
-    const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
+    if (t === 'sick') { sick.add(e.date); return; }
+    totalMin += workedMinutes(e); workDays.add(e.date);
   });
+  // Pay is computed once, centrally, via grossForMonth()/travelForMonth() —
+  // not re-derived here — so this quick total always matches the deeper
+  // payslip on the "עוד" page (same rate rules, overtime tiers, sick-day
+  // credit, and global/fixed-salary mode all apply identically everywhere).
   const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
-  totalPay += travelPay;
+  const totalPay = grossForMonth(entries, store.settings, viewYear, viewMonth).gross + travelPay;
   $('statHours').textContent = fmtHours(totalMin);
   $('statDays').textContent = workDays.size;
   const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0;
+  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0 || totalPay > 0;
   $('statPayCard').hidden = !anyRate;
   if (anyRate) $('statPay').textContent = fmtMoney(totalPay, store.settings.currency);
 
@@ -398,20 +401,20 @@ function renderMonthlyReport(entries) {
   if (!entries.length) { card.hidden = true; return; }
   card.hidden = false;
 
-  let totalMin = 0, totalPay = 0;
+  let totalMin = 0;
   const workDays = new Set(), vac = new Set(), sick = new Set();
-  const sickHours = payrollOf(store.settings).sickDayHours;
   entries.forEach((e) => {
     const t = entryType(e);
     if (t === 'vacation') { vac.add(e.date); return; }
-    if (t === 'sick') { sick.add(e.date); totalPay += sickHours * effRate(e); return; }
-    const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
+    if (t === 'sick') { sick.add(e.date); return; }
+    totalMin += workedMinutes(e); workDays.add(e.date);
   });
+  // Same centralized pay source as renderStats() — see its comment.
   const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
-  totalPay += travelPay;
+  const totalPay = grossForMonth(entries, store.settings, viewYear, viewMonth).gross + travelPay;
   const goalM = Number(store.settings.goalHours) || 0;
   const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0;
+  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0 || totalPay > 0;
 
   const rows = [];
   if (goalM > 0) {
@@ -1222,16 +1225,27 @@ function renderMore() {
 // ------------------------------------------------------------------ payroll settings
 let payrollFormSnapshot = '';
 let payrollTravelMode = 'none'; // 'none' | 'perDay' | 'monthly' — chosen in the travel seg control
+let payrollPayMode = 'hourly'; // 'hourly' | 'global' — chosen in the pay-type seg control
 function serializePayrollForm() {
-  const vals = ['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pSickHours', 'pTravelDay', 'pTravelMonth']
+  const vals = ['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pSickHours', 'pGlobalSalary', 'pTravelDay', 'pTravelMonth']
     .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value));
-  return JSON.stringify([...vals, payrollTravelMode]);
+  return JSON.stringify([...vals, payrollTravelMode, payrollPayMode]);
 }
 function isPayrollDirty() { return serializePayrollForm() !== payrollFormSnapshot; }
 function renderTravelMode() {
   $('pTravelMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === payrollTravelMode));
   $('pTravelPerDayField').hidden = payrollTravelMode !== 'perDay';
   $('pTravelMonthlyField').hidden = payrollTravelMode !== 'monthly';
+}
+// A "global" (fixed monthly salary) employee doesn't earn overtime tiers or
+// per-entry pay the way an hourly employee does — hide the fields that only
+// make sense for hourly pay so the form doesn't imply they still apply.
+function renderPayMode() {
+  const isGlobal = payrollPayMode === 'global';
+  $('pPayMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === payrollPayMode));
+  $('pGlobalSalaryField').hidden = !isGlobal;
+  $('pPayModeNote').hidden = !isGlobal;
+  $('pOvertimeField').hidden = isGlobal;
 }
 function openPayroll() {
   const p = payrollOf(store.settings);
@@ -1245,10 +1259,13 @@ function openPayroll() {
   $('pRecDays').value = p.recreationDays;
   $('pRecRate').value = p.recreationDayRate;
   $('pSickHours').value = p.sickDayHours;
+  $('pGlobalSalary').value = p.globalSalary;
   $('pTravelDay').value = p.travelPerDay;
   $('pTravelMonth').value = p.travelMonthly;
   payrollTravelMode = p.travelMode;
+  payrollPayMode = p.payMode;
   renderTravelMode();
+  renderPayMode();
   payrollFormSnapshot = serializePayrollForm();
   openSheet($('payrollSheet'));
 }
@@ -1260,6 +1277,8 @@ function submitPayroll(ev) {
   ev.preventDefault();
   const num = (id, def) => { const v = Number($(id).value); return Number.isFinite(v) ? v : def; };
   store.saveSettings({ payroll: {
+    payMode: payrollPayMode,
+    globalSalary: num('pGlobalSalary', 0),
     overtime: $('pOvertime').checked,
     otThreshold: DEFAULT_PAYROLL.otThreshold,
     incomeTax: num('pIncomeTax', 0),
@@ -1833,6 +1852,11 @@ function bind() {
     const b = e.target.closest('button[data-mode]'); if (!b) return;
     payrollTravelMode = b.dataset.mode;
     renderTravelMode();
+  });
+  $('pPayMode').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return;
+    payrollPayMode = b.dataset.mode;
+    renderPayMode();
   });
   $('moreCards').addEventListener('click', (e) => {
     const y = e.target.closest('button[data-yr]');

@@ -509,7 +509,20 @@
       <form id="payrollForm" class="form" autocomplete="off">
         <p class="form-note">כל הערכים אחוזים או סכומים שאפשר לשנות. החישובים הם הערכה בלבד.</p>
 
-        <label class="switch-field">
+        <div class="fieldset">
+          <div class="fieldset-title">סוג שכר</div>
+          <div class="seg" id="pPayMode" role="tablist">
+            <button type="button" data-mode="hourly" class="on">לפי שעות</button>
+            <button type="button" data-mode="global">גלובלי (משכורת קבועה)</button>
+          </div>
+          <div class="field" id="pGlobalSalaryField" hidden>
+            <span class="field-label">משכורת חודשית קבועה</span>
+            <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pGlobalSalary" min="0" step="any" inputmode="decimal" placeholder="0" /></div>
+          </div>
+          <p class="form-note" id="pPayModeNote" hidden>בשכר גלובלי מקבלים את הסכום הקבוע כל חודש — השעות בדוחות הן למעקב בלבד ולא משפיעות על השכר.</p>
+        </div>
+
+        <label class="switch-field" id="pOvertimeField">
           <span>חישוב שעות נוספות (125% / 150%)</span>
           <span class="switch"><input type="checkbox" id="pOvertime" /><span class="knob"></span></span>
         </label>

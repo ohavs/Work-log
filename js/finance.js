@@ -3,6 +3,8 @@
 import { workedMinutes, decimalHours, entryType, isWork, inMonth, parseDate, MONTHS } from './util.js';
 
 export const DEFAULT_PAYROLL = {
+  payMode: 'hourly',      // 'hourly' | 'global' — 'global' pays a fixed monthly salary regardless of hours actually worked
+  globalSalary: 0,        // קבוע חודשי (₪), used when payMode === 'global'
   incomeTax: 0,          // מס הכנסה — אחוז אפקטיבי
   socialHealth: 3.5,     // ביטוח לאומי + בריאות (עובד)
   pensionEmployee: 6,    // הפרשת עובד לפנסיה
@@ -51,34 +53,53 @@ export function splitOvertime(hours, threshold = 8) {
 // Sick days (יום מחלה) are paid days off — credited at a fixed hours/day
 // (settings.payroll.sickDayHours, default 8.4h) and taxed like regular income, but
 // excluded from the overtime split since no actual shift was worked.
+//
+// A "global" (משכורת גלובלית) employee is paid a fixed monthly salary
+// regardless of hours actually worked — gross is just that fixed amount,
+// not rate × hours. Hours (and, if overtime tracking is on, the 125%/150%
+// split) are still computed for information/awareness, but never multiplied
+// into pay, and sick days add nothing extra since the fixed salary already
+// covers them.
 export function grossForMonth(entries, settings, y, m) {
   const p = payrollOf(settings);
-  let gross = 0, hours = 0, ot125 = 0, ot150 = 0;
-  // accumulate per (date) using an effective rate = weighted by entries' rates
+  let hours = 0, sickGross = 0;
   const dayHours = new Map();
   const dayPayFlat = new Map();
   entries.forEach((e) => {
     if (!inMonth(e, y, m)) return;
     if (isWork(e)) {
       const h = decimalHours(workedMinutes(e));
-      const r = rateOf(e, settings);
       hours += h;
       dayHours.set(e.date, (dayHours.get(e.date) || 0) + h);
-      dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
+      if (p.payMode !== 'global') {
+        const r = rateOf(e, settings);
+        dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
+      }
     } else if (entryType(e) === 'sick') {
       const h = Number(p.sickDayHours) || 0;
-      const r = rateOf(e, settings);
       hours += h;
-      gross += h * r;
+      if (p.payMode !== 'global') sickGross += h * rateOf(e, settings);
     }
   });
+
+  let ot125 = 0, ot150 = 0;
+  if (p.overtime) {
+    for (const h of dayHours.values()) {
+      const { t125, t150 } = splitOvertime(h, p.otThreshold);
+      ot125 += t125; ot150 += t150;
+    }
+  }
+  if (p.payMode === 'global') {
+    return { gross: Number(p.globalSalary) || 0, hours, ot125, ot150 };
+  }
+
+  let gross = sickGross;
   for (const [date, h] of dayHours) {
     const flatPay = dayPayFlat.get(date) || 0;
     const avgRate = h > 0 ? flatPay / h : 0;
     if (p.overtime) {
       const { reg, t125, t150 } = splitOvertime(h, p.otThreshold);
       gross += (reg + t125 * 1.25 + t150 * 1.5) * avgRate;
-      ot125 += t125; ot150 += t150;
     } else {
       gross += flatPay;
     }

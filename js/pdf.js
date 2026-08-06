@@ -10,13 +10,13 @@
 // sliced apart — see the comment on groupRowsByPage for why. Falls back to
 // the browser's native print-to-PDF only if file generation itself throws.
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
-import { payrollOf, rateOf } from './finance.js';
+import { payrollOf, rateOf, grossForMonth, travelForMonth } from './finance.js';
 
 function buildReport(el, { entries, settings, year, month }) {
   const p = payrollOf(settings);
   const cur = settings.currency || '₪';
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
-  let totalMin = 0, totalPay = 0;
+  let totalMin = 0;
   const days = new Set();
   let vacationDays = 0, sickDays = 0;
 
@@ -32,7 +32,6 @@ function buildReport(el, { entries, settings, year, month }) {
       sickDays++;
       const r = rateOf(e, settings);
       const pay = p.sickDayHours * r;
-      totalPay += pay;
       return `<tr>
         <td>${dateCell}</td><td colspan="2">${TYPE_META[t].label}</td>
         <td>${fmtHours(p.sickDayHours * 60)}</td><td>${r ? fmtMoney(pay, cur) : '—'}</td><td>${(e.note || '').replace(/[<>]/g, '')}</td>
@@ -41,7 +40,7 @@ function buildReport(el, { entries, settings, year, month }) {
     const mins = workedMinutes(e);
     const r = rateOf(e, settings);
     const pay = decimalHours(mins) * r;
-    totalMin += mins; totalPay += pay; days.add(e.date);
+    totalMin += mins; days.add(e.date);
     return `<tr>
       <td>${dateCell}</td><td>${e.start}–${e.end}</td><td>${e.breakMin ? e.breakMin + ' דק׳' : '—'}</td>
       <td>${fmtHours(mins)}</td><td>${r ? fmtMoney(pay, cur) : '—'}</td><td>${(e.note || '').replace(/[<>]/g, '')}</td>
@@ -51,6 +50,13 @@ function buildReport(el, { entries, settings, year, month }) {
   const offParts = [];
   if (vacationDays) offParts.push(`${vacationDays} ימי חופשה`);
   if (sickDays) offParts.push(`${sickDays} ימי מחלה`);
+  // Summary total comes from the same central calculation as everywhere
+  // else in the app (grossForMonth + travel) — not summed from the rows
+  // above — so a global/fixed-salary month shows the fixed salary here too,
+  // instead of an hourly-rate estimate that would disagree with it. The
+  // per-row "שכר" column stays as an hourly-rate estimate either way (still
+  // a useful reference), it's only the total that must match the real payslip.
+  const totalPay = grossForMonth(entries, settings, year, month).gross + travelForMonth(entries, settings, year, month).total;
   const anyRate = Number(settings.rate) > 0 || entries.some((e) => e.rate) || totalPay > 0;
 
   el.innerHTML = `
