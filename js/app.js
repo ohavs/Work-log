@@ -312,15 +312,42 @@ function ringSVG(pctRaw, label, sub, caption) {
   </div>`;
 }
 
-function renderWeekly(entries) {
-  const card = $('weeklyCard'), body = $('weeklyBody');
+// "+2:15" / "−1:40" — a signed hour label for a goal comparison.
+function fmtDiff(mins) { return `${mins < 0 ? '−' : '+'}${fmtHours(Math.abs(mins))}`; }
+
+// Groups `entries` (already scoped to one month, e.g. via monthEntries()) by
+// ISO week and compares each week's actual hours to the weekly goal — but a
+// week that straddles a month boundary only has some of its 7 days inside
+// `y`/`m` (the entries passed in only cover those days too), so the goal is
+// prorated by how many of the week's 7 calendar days actually fall in this
+// month. A week with only 3 of its days in this month is judged against
+// 3/7 of the weekly goal, not the full week's goal.
+function weeklyGoalBreakdown(entries, y, m) {
+  const goalW = Number(store.settings.goalWeekHours) || 0;
   const weeks = new Map();
   entries.forEach((e) => { if (!isWork(e)) return; const wk = weekStartISO(parseDate(e.date)); weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e)); });
-  const rows = [...weeks.entries()].filter(([, m]) => m > 0).sort((a, b) => a[0].localeCompare(b[0]));
+  return [...weeks.entries()].filter(([, mins]) => mins > 0).sort((a, b) => a[0].localeCompare(b[0])).map(([wk, mins]) => {
+    let daysInMonth = 0;
+    const start = parseDate(wk);
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); if (d.getFullYear() === y && d.getMonth() === m) daysInMonth++; }
+    const hasGoal = goalW > 0;
+    const goalMins = hasGoal ? Math.round(goalW * 60 * (daysInMonth / 7)) : 0;
+    const diffMins = hasGoal ? mins - goalMins : 0;
+    return { wk, mins, daysInMonth, hasGoal, goalMins, diffMins };
+  });
+}
+
+function renderWeekly(entries) {
+  const card = $('weeklyCard'), body = $('weeklyBody');
+  const rows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
   if (rows.length < 2) { card.hidden = true; return; }
   card.hidden = false;
-  const max = Math.max(...rows.map(([, m]) => m));
-  body.innerHTML = rows.map(([wk, mins]) => `<div class="week-row"><span class="week-name">${weekLabel(wk)}</span><span class="week-bar"><span class="week-bar-fill" style="width:${Math.round((mins / max) * 100)}%"></span></span><span class="week-val">${fmtHours(mins)}</span></div>`).join('');
+  const max = Math.max(...rows.map((r) => r.mins)); // fallback bar scale when no weekly goal is set
+  body.innerHTML = rows.map((r) => {
+    const pct = r.hasGoal ? Math.min(100, Math.round((r.mins / Math.max(1, r.goalMins)) * 100)) : Math.round((r.mins / max) * 100);
+    const diff = r.hasGoal ? `<span class="week-diff ${r.diffMins >= 0 ? 'pos' : 'neg'}">${fmtDiff(r.diffMins)}</span>` : '';
+    return `<div class="week-row"><span class="week-name">${weekLabel(r.wk)}</span><span class="week-bar${r.hasGoal ? ' compact' : ''}"><span class="week-bar-fill" style="width:${pct}%"></span></span><span class="week-val">${fmtHours(r.mins)}</span>${diff}</div>`;
+  }).join('');
   $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen));
   body.hidden = !weeklyOpen;
 }
@@ -359,6 +386,11 @@ function renderMonthlyReport(entries) {
     rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-val">${fmtHours(totalMin)}</span></div>`);
   }
   if (anyRate) rows.push(`<div class="week-row"><span class="week-name">שכר${travelPay ? ' (כולל נסיעות)' : ''}</span><span class="week-val">${fmtMoney(totalPay, store.settings.currency)}</span></div>`);
+  const weekRows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
+  if (weekRows.some((r) => r.hasGoal)) {
+    const totalDiff = weekRows.reduce((s, r) => s + r.diffMins, 0);
+    rows.push(`<div class="week-row"><span class="week-name">הפרש מהיעד השבועי</span><span class="week-val ${totalDiff >= 0 ? 'pos' : 'neg'}">${fmtDiff(totalDiff)}</span></div>`);
+  }
   rows.push(`<div class="week-row"><span class="week-name">ימי עבודה</span><span class="week-val">${workDays.size}</span></div>`);
   if (vac.size) rows.push(`<div class="week-row"><span class="week-name">ימי חופשה</span><span class="week-val">${vac.size}</span></div>`);
   if (sick.size) rows.push(`<div class="week-row"><span class="week-name">ימי מחלה</span><span class="week-val">${sick.size}</span></div>`);
@@ -1008,9 +1040,8 @@ async function runExportPdf() {
   closeSheet($('exportSheet'));
   toast('מכין PDF…');
   try {
-    const res = await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
-    if (res && res.method === 'file') toast('קובץ ה‑PDF הורד');
-    else toast('בחרו "שמירה כ‑PDF" בחלון ההדפסה');
+    await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
+    toast('בחרו "שמירה כ‑PDF" בחלון ההדפסה');
   } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑PDF'); }
 }
 function runExportCsv() { closeSheet($('exportSheet')); try { exportCSV({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth }); toast('קובץ ה‑CSV הורד'); } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑CSV'); } }

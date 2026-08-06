@@ -1,6 +1,11 @@
-// PDF export — renders the styled RTL report to a real downloadable PDF via
-// html2canvas + jsPDF (Hebrew renders as image, always correct). Falls back to
-// the browser's native print-to-PDF if the libraries can't be loaded.
+// PDF export — renders the styled RTL report and hands it to the browser's
+// own print-to-PDF ("Save as PDF" in the print dialog). Deliberately not
+// using an html2canvas/jsPDF pipeline: that requires loading two libraries
+// off a CDN on every export (fails offline, and did fail for real — a blank
+// PDF, because html2canvas unreliably captures elements parked off-screen at
+// -9999px) and rasterizes the whole page into an image, losing selectable
+// Hebrew text. window.print() is 100% local, always available, and keeps
+// the text real.
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
 
 function buildReport(el, { entries, settings, year, month }) {
@@ -52,57 +57,14 @@ function buildReport(el, { entries, settings, year, month }) {
   return `שעות-עבודה-${MONTHS[month]}-${year}`;
 }
 
-async function loadLibs() {
-  const sources = [
-    ['https://cdn.jsdelivr.net/npm/jspdf@2.5.2/+esm', 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/+esm'],
-    ['https://esm.sh/jspdf@2.5.2', 'https://esm.sh/html2canvas@1.4.1'],
-  ];
-  let lastErr;
-  for (const [jsUrl, hcUrl] of sources) {
-    try {
-      const [jsMod, hcMod] = await Promise.all([import(jsUrl), import(hcUrl)]);
-      const jsPDF = jsMod.jsPDF || (jsMod.default && jsMod.default.jsPDF) || jsMod.default;
-      const html2canvas = hcMod.default || hcMod;
-      if (jsPDF && html2canvas) return { jsPDF, html2canvas };
-    } catch (e) { lastErr = e; }
-  }
-  throw lastErr || new Error('PDF libraries unavailable');
-}
-
-async function renderToFile(el, fileBase) {
-  const { jsPDF, html2canvas } = await loadLibs();
-  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-  const img = canvas.toDataURL('image/jpeg', 0.95);
-  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
-  const pageW = pdf.internal.pageSize.getWidth();
-  const pageH = pdf.internal.pageSize.getHeight();
-  const imgH = (canvas.height * pageW) / canvas.width;
-  let remaining = imgH, position = 0;
-  pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST');
-  remaining -= pageH;
-  while (remaining > 0) { position -= pageH; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST'); remaining -= pageH; }
-  pdf.save(`${fileBase}.pdf`);
-}
-
-function printFallback(el, fileBase) {
-  const prevTitle = document.title;
-  document.title = fileBase;
-  const cleanup = () => { document.title = prevTitle; el.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
-  window.addEventListener('afterprint', cleanup);
-  setTimeout(() => window.print(), 60);
-  setTimeout(cleanup, 60000);
-}
-
 export async function exportPDF({ entries, settings, year, month }) {
   const el = document.getElementById('pdfReport');
   const fileBase = buildReport(el, { entries, settings, year, month });
-  try {
-    await renderToFile(el, fileBase);
-    el.innerHTML = '';
-    return { method: 'file' };
-  } catch (e) {
-    console.warn('PDF file generation unavailable, using print fallback:', e);
-    printFallback(el, fileBase);
-    return { method: 'print' };
-  }
+  const prevTitle = document.title;
+  document.title = fileBase; // becomes the suggested filename in "Save as PDF"
+  const cleanup = () => { document.title = prevTitle; el.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
+  window.addEventListener('afterprint', cleanup);
+  setTimeout(() => window.print(), 60); // let the DOM paint before print grabs it
+  setTimeout(cleanup, 60000); // safety net if afterprint never fires (e.g. dialog dismissed oddly)
+  return { method: 'print' };
 }

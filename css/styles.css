@@ -171,11 +171,17 @@ svg { display: block; }
 .weekly-head .chev svg { width: 20px; height: 20px; }
 .weekly-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
 .weekly-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 12px; }
-.week-row { display: flex; align-items: center; gap: 12px; }
-.week-name { font-size: 13px; color: var(--muted-fg); min-width: 92px; }
+.week-row { display: flex; align-items: center; gap: 8px; }
+.week-name { font-size: 13px; color: var(--muted-fg); flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .week-bar { flex: 1; height: 9px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+/* when a per-row diff label is also shown (weekly-goal comparison), shrink the
+   bar to a fixed narrow width so the diff still fits on one line */
+.week-bar.compact { flex: 0 0 34px; }
 .week-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), var(--primary-2)); }
-.week-val { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 46px; text-align: start; }
+.week-val { font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 44px; text-align: start; }
+.week-val.pos, .week-diff.pos { color: var(--primary); }
+.week-val.neg, .week-diff.neg { color: var(--danger); }
+.week-diff { font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; min-width: 48px; text-align: start; }
 
 .list-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; padding: 0 2px; }
 .list-head h2 { font-size: 18px; }
