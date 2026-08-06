@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v54';
+const CACHE = 'worklog-v55';
 const SHELL = [
   './',
   './index.html',
@@ -13,6 +13,8 @@ const SHELL = [
   './js/pickers.js',
   './js/finance.js',
   './js/config.js',
+  './js/vendor/jspdf.umd.min.js',
+  './js/vendor/html2canvas-pro.min.js',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -87,7 +89,7 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Cross-origin (fonts, CDN libs for PDF): stale-while-revalidate.
+  // Cross-origin (Google Fonts): stale-while-revalidate.
   e.respondWith(
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {

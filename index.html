@@ -627,9 +627,14 @@
     </div>
   </div>
 
-  <div id="pdfReport" class="pdf-report" aria-hidden="true"></div>
+  <div class="pdf-report-wrap"><div id="pdfReport" class="pdf-report" aria-hidden="true"></div></div>
   <div class="toast" id="toast" hidden></div>
 
+  <!-- Local copies (no CDN) — used to render the PDF export as a real
+       downloadable file. Loaded before app.js so pdf.js can use them
+       synchronously via window.jspdf.jsPDF / window.html2canvas. -->
+  <script defer src="./js/vendor/jspdf.umd.min.js"></script>
+  <script defer src="./js/vendor/html2canvas-pro.min.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>

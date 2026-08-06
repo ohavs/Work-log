@@ -1067,14 +1067,12 @@ async function handleAuth() {
 
 // ------------------------------------------------------------------ export
 function openExport() { if (!monthEntries().length) { toast('אין רישומים לייצוא בחודש זה'); return; } openSheet($('exportSheet')); }
-function runExportPdf() {
-  // Stays fully synchronous end-to-end (no await, no setTimeout anywhere in
-  // this chain) — window.print() requires the browser's "user activation"
-  // from the click, which an async gap can silently drop on some browsers.
+async function runExportPdf() {
   closeSheet($('exportSheet'));
+  toast('מכין PDF…');
   try {
-    exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
-    toast('בחרו "שמירה כ‑PDF" בחלון ההדפסה');
+    const res = await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
+    toast(res.method === 'file' ? 'קובץ ה‑PDF הורד' : 'בחרו "שמירה כ‑PDF" בחלון ההדפסה');
   } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑PDF'); }
 }
 function runExportCsv() { closeSheet($('exportSheet')); try { exportCSV({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth }); toast('קובץ ה‑CSV הורד'); } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑CSV'); } }

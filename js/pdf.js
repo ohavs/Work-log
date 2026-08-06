@@ -1,11 +1,12 @@
-// PDF export — renders the styled RTL report and hands it to the browser's
-// own print-to-PDF ("Save as PDF" in the print dialog). Deliberately not
-// using an html2canvas/jsPDF pipeline: that requires loading two libraries
-// off a CDN on every export (fails offline, and did fail for real — a blank
-// PDF, because html2canvas unreliably captures elements parked off-screen at
-// -9999px) and rasterizes the whole page into an image, losing selectable
-// Hebrew text. window.print() is 100% local, always available, and keeps
-// the text real.
+// PDF export — renders the styled RTL report to a real downloadable .pdf
+// file via jsPDF + html2canvas, loaded from local files (js/vendor/, no CDN
+// — the earlier CDN-based version could fail offline or behind stricter
+// network/CSP policies). The previous blank-PDF bug was html2canvas
+// capturing #pdfReport while it was parked off-screen at -9999px, which
+// browsers don't reliably paint; it's now kept in-flow inside a
+// zero-height, overflow-hidden wrapper instead (see .pdf-report-wrap).
+// Falls back to the browser's native print-to-PDF only if the file
+// generation itself throws.
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
 
 function buildReport(el, { entries, settings, year, month }) {
@@ -57,19 +58,42 @@ function buildReport(el, { entries, settings, year, month }) {
   return `שעות-עבודה-${MONTHS[month]}-${year}`;
 }
 
-export function exportPDF({ entries, settings, year, month }) {
-  const el = document.getElementById('pdfReport');
-  const fileBase = buildReport(el, { entries, settings, year, month });
+async function renderToFile(el, fileBase) {
+  const jsPDF = window.jspdf && window.jspdf.jsPDF;
+  const html2canvas = window.html2canvas;
+  if (!jsPDF || !html2canvas) throw new Error('PDF libraries not loaded (js/vendor/ scripts missing or blocked)');
+  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+  const img = canvas.toDataURL('image/jpeg', 0.95);
+  const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+  const pageW = pdf.internal.pageSize.getWidth();
+  const pageH = pdf.internal.pageSize.getHeight();
+  const imgH = (canvas.height * pageW) / canvas.width;
+  let remaining = imgH, position = 0;
+  pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST');
+  remaining -= pageH;
+  while (remaining > 0) { position -= pageH; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST'); remaining -= pageH; }
+  pdf.save(`${fileBase}.pdf`);
+}
+
+function printFallback(el, fileBase) {
   const prevTitle = document.title;
   document.title = fileBase; // becomes the suggested filename in "Save as PDF"
   const cleanup = () => { document.title = prevTitle; el.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
   window.addEventListener('afterprint', cleanup);
-  // Must run synchronously, in the same task as the click that triggered this
-  // — deferring it even by a 0ms setTimeout can drop the "user activation"
-  // that window.print() requires, making it silently do nothing on some
-  // browsers. @media print recomputes layout for #pdfReport at call time, so
-  // there's no need to wait for a paint frame first.
   window.print();
   setTimeout(cleanup, 60000); // safety net if afterprint never fires (e.g. dialog dismissed oddly)
-  return { method: 'print' };
+}
+
+export async function exportPDF({ entries, settings, year, month }) {
+  const el = document.getElementById('pdfReport');
+  const fileBase = buildReport(el, { entries, settings, year, month });
+  try {
+    await renderToFile(el, fileBase);
+    el.innerHTML = '';
+    return { method: 'file' };
+  } catch (e) {
+    console.warn('PDF file generation failed, falling back to print:', e);
+    printFallback(el, fileBase);
+    return { method: 'print' };
+  }
 }
