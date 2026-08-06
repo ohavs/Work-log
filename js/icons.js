@@ -52,6 +52,7 @@ export function initIcons() {
   set('prevMonth', 'chevRight'); // RTL: previous (older) points right
   set('nextMonth', 'chevLeft');
   set('weeklyChev', 'chevDown');
+  set('monthlyChev', 'chevDown');
   set('moreChev', 'chevDown');
   set('dpPrev', 'chevRight');
   set('dpNext', 'chevLeft');

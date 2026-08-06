@@ -30,6 +30,7 @@ let viewMonth = now.getMonth();
 let editingId = null;
 let formType = 'work';
 let weeklyOpen = false;
+let monthlyOpen = false;
 let moreOpen = false;
 let jobFilter = null;       // null = all workplaces; else jobId
 let editingJobId = null;
@@ -322,6 +323,46 @@ function renderWeekly(entries) {
   body.hidden = !weeklyOpen;
 }
 
+// Monthly report — actual hours worked this month vs. the monthly goal (if
+// one is set), salary, and a days breakdown. Same visual language as the
+// weekly summary card above it (.week-row / .week-bar), so it reads as a
+// matching pair rather than a bolted-on extra.
+function renderMonthlyReport(entries) {
+  const card = $('monthlyCard'), body = $('monthlyBody');
+  if (!entries.length) { card.hidden = true; return; }
+  card.hidden = false;
+
+  let totalMin = 0, totalPay = 0;
+  const workDays = new Set(), vac = new Set(), sick = new Set();
+  entries.forEach((e) => {
+    const t = entryType(e);
+    if (t === 'vacation') { vac.add(e.date); return; }
+    if (t === 'sick') { sick.add(e.date); return; }
+    const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
+  });
+  const goalM = Number(store.settings.goalHours) || 0;
+  const rate = Number(store.settings.rate) || 0;
+  const anyRate = rate > 0 || entries.some((e) => e.rate);
+
+  const rows = [];
+  if (goalM > 0) {
+    const pct = Math.round((totalMin / 60 / goalM) * 100);
+    const remainMin = Math.max(0, goalM * 60 - totalMin);
+    rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-bar"><span class="week-bar-fill" style="width:${Math.min(100, pct)}%"></span></span><span class="week-val">${fmtHours(totalMin)} / ${goalM}</span></div>`);
+    rows.push(`<p class="form-note">${pct >= 100 ? `היעד הושלם ✓ (${pct}%)` : `נותרו ${fmtHours(remainMin)} שעות ליעד החודשי (${pct}%)`}</p>`);
+  } else {
+    rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-val">${fmtHours(totalMin)}</span></div>`);
+  }
+  if (anyRate) rows.push(`<div class="week-row"><span class="week-name">שכר</span><span class="week-val">${fmtMoney(totalPay, store.settings.currency)}</span></div>`);
+  rows.push(`<div class="week-row"><span class="week-name">ימי עבודה</span><span class="week-val">${workDays.size}</span></div>`);
+  if (vac.size) rows.push(`<div class="week-row"><span class="week-name">ימי חופשה</span><span class="week-val">${vac.size}</span></div>`);
+  if (sick.size) rows.push(`<div class="week-row"><span class="week-name">ימי מחלה</span><span class="week-val">${sick.size}</span></div>`);
+
+  body.innerHTML = rows.join('');
+  $('monthlyToggle').setAttribute('aria-expanded', String(monthlyOpen));
+  body.hidden = !monthlyOpen;
+}
+
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function renderEntries(entries) {
@@ -380,7 +421,7 @@ function renderEntries(entries) {
   }
 }
 
-function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderEntries(e); }
+function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderMonthlyReport(e); renderEntries(e); }
 
 // ------------------------------------------------------------------ bulk selection / delete
 function updateSelectBar() {
@@ -1786,6 +1827,7 @@ function bind() {
   $('cSwatches').addEventListener('click', (e) => { const b = e.target.closest('[data-swatch]'); if (b) { catPick = b.dataset.swatch; renderSwatches(catPick); } });
 
   $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
+  $('monthlyToggle').onclick = () => { monthlyOpen = !monthlyOpen; $('monthlyToggle').setAttribute('aria-expanded', String(monthlyOpen)); $('monthlyBody').hidden = !monthlyOpen; };
 
   $('settingsBtn').onclick = openSettings;
   $('themeToggle').onclick = toggleTheme;
