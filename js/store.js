@@ -306,6 +306,28 @@ class Store {
     return entry;
   }
 
+  // Batched multi-add (e.g. "mark N vacation days used at once") — a single
+  // persist+emit instead of one per entry. Returns the created entries;
+  // any item that would breach the daily work-entry cap is silently skipped
+  // (checked against both existing entries and earlier items in this same
+  // batch, so the cap can't be bypassed by batching around it).
+  addEntries(dataArray) {
+    const now = Date.now();
+    const created = [];
+    dataArray.forEach((data) => {
+      if (isWork(data)) {
+        const sameDay = this.entries.filter((e) => e.date === data.date && isWork(e)).length
+          + created.filter((e) => e.date === data.date && isWork(e)).length;
+        if (sameDay >= MAX_WORK_ENTRIES_PER_DAY) return;
+      }
+      const entry = { id: uid(), created: now, ...data, updated: now };
+      this.entries.push(entry);
+      created.push(entry);
+    });
+    if (created.length) { this._persist(); this._emit(); }
+    return created;
+  }
+
   updateEntry(id, data) {
     const i = this.entries.findIndex((e) => e.id === id);
     if (i === -1) return;

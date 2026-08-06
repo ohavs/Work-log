@@ -527,8 +527,14 @@
 
         <div class="fieldset">
           <div class="fieldset-title">נסיעות</div>
-          <div class="field"><span class="field-label">החזר נסיעות ליום עבודה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pTravelDay" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
-          <p class="form-note">מתווסף לשכר לפי מספר ימי העבודה בפועל בחודש — בלי ניכויי מס/פנסיה.</p>
+          <div class="seg" id="pTravelMode" role="tablist">
+            <button type="button" data-mode="none" class="on">ללא</button>
+            <button type="button" data-mode="perDay">ליום עבודה</button>
+            <button type="button" data-mode="monthly">סכום חודשי קבוע</button>
+          </div>
+          <div class="field" id="pTravelPerDayField" hidden><span class="field-label">החזר נסיעות ליום עבודה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pTravelDay" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
+          <div class="field" id="pTravelMonthlyField" hidden><span class="field-label">סכום נסיעות חודשי קבוע</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pTravelMonth" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
+          <p class="form-note">מתווסף לשכר — בלי ניכויי מס/פנסיה. רק אחת מהאפשרויות פעילה בכל רגע.</p>
         </div>
 
         <button type="submit" class="btn accent big">שמירה</button>
@@ -545,6 +551,35 @@
         <button type="button" class="action" id="doExportPdf"><span class="action-ic" data-ic="pdf"></span><span class="action-text"><b>ייצוא ל‑PDF</b><small>דוח מעוצב להדפסה או שמירה</small></span><span class="action-go" data-ic="chevStart"></span></button>
         <button type="button" class="action" id="doExportCsv"><span class="action-ic" data-ic="csv"></span><span class="action-text"><b>ייצוא ל‑CSV</b><small>קובץ לאקסל / Google Sheets</small></span><span class="action-go" data-ic="chevStart"></span></button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ Quick vacation-days sheet ============ -->
+  <div class="sheet-backdrop" id="vacQuickSheet" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-handle"></div>
+      <div class="sheet-head"><span class="ghost-spacer"></span><h3>סימון חופשה שנוצלה</h3><button class="text-btn" id="closeVacQuick">סגירה</button></div>
+      <form id="vacQuickForm" class="form">
+        <div class="field">
+          <span class="field-label">תאריך התחלה</span>
+          <button type="button" class="picker-field" id="vqDateBtn"><span class="pf-ic" data-ic="calendar"></span><span id="vqDateText">—</span></button>
+        </div>
+        <div class="stepper-row">
+          <span class="stepper-label">מספר ימים</span>
+          <div class="stepper" data-target="vqDays" data-min="1" data-max="30">
+            <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות ימים">−</button>
+            <span class="stepper-val"><b id="vqDaysVal">1</b></span>
+            <button type="button" class="stepper-btn" data-step="1" aria-label="יותר ימים">+</button>
+          </div>
+        </div>
+        <input type="hidden" id="vqDays" value="1" />
+        <label class="switch-field">
+          <span>לדלג על ימים שסומנו כ"ללא עבודה"</span>
+          <span class="switch"><input type="checkbox" id="vqSkipOff" checked /><span class="knob"></span></span>
+        </label>
+        <p class="form-note" id="vqPreview"></p>
+        <button type="submit" class="btn accent big">הוספה</button>
+      </form>
     </div>
   </div>
 

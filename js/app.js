@@ -6,7 +6,7 @@ import { initIcons, svg } from './icons.js';
 import { initPickers, openTimePicker, openDatePicker, showConfirm } from './pickers.js';
 import {
   DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
-  yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf,
+  yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth,
 } from './finance.js';
 import { uid } from './util.js';
 import {
@@ -264,12 +264,12 @@ function renderStats(entries) {
     if (t === 'sick') { sick.add(e.date); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
-  const travelPerDay = Number(payrollOf(store.settings).travelPerDay) || 0;
-  totalPay += travelPerDay * workDays.size;
+  const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
+  totalPay += travelPay;
   $('statHours').textContent = fmtHours(totalMin);
   $('statDays').textContent = workDays.size;
   const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPerDay > 0;
+  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0;
   $('statPayCard').hidden = !anyRate;
   if (anyRate) $('statPay').textContent = fmtMoney(totalPay, store.settings.currency);
 
@@ -282,7 +282,14 @@ function renderStats(entries) {
   const goalM = Number(store.settings.goalHours) || 0;
   const goalW = Number(store.settings.goalWeekHours) || 0;
   const rings = [];
-  if (goalW > 0) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`, weekLabel(weekStartISO(new Date())))); }
+  // The "השבוע" ring tracks the real current week (currentWeekMinutes() always
+  // uses today's date, not the viewed month) — only meaningful while actually
+  // viewing the current month. Without this guard it kept showing "this real
+  // week" even while browsing a past/future month, silently mismatching
+  // whatever period the rest of the page was displaying.
+  const today = new Date();
+  const isViewingCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+  if (goalW > 0 && isViewingCurrentMonth) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`, weekLabel(weekStartISO(today)))); }
   if (goalM > 0) { rings.push(ringSVG((totalMin / 60 / goalM) * 100, 'החודש', `${fmtHours(totalMin)} / ${goalM}`, `${MONTHS[viewMonth]} ${viewYear}`)); }
   const gr = $('goalRings');
   gr.innerHTML = rings.join('');
@@ -369,8 +376,7 @@ function renderMonthlyReport(entries) {
     if (t === 'sick') { sick.add(e.date); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
-  const travelPerDay = Number(payrollOf(store.settings).travelPerDay) || 0;
-  const travelPay = travelPerDay * workDays.size;
+  const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
   totalPay += travelPay;
   const goalM = Number(store.settings.goalHours) || 0;
   const rate = Number(store.settings.rate) || 0;
@@ -1154,6 +1160,7 @@ function renderMore() {
     <div class="fcard-head accent"><span class="fic">${svg('vacation')}</span><span class="fcard-title">חופשה ${viewYear}</span><span class="fcard-sub">${vb.sick} ימי מחלה</span></div>
     <div class="vac-track"><div class="vac-fill" style="width:${vpct}%"></div></div>
     <div class="frow" style="border:none;padding-top:2px"><span class="fk">נוצלו ${vb.used} מתוך ${vb.entitled}</span><span class="fv">נותרו ${vb.remaining} ימים</span></div>
+    <button type="button" class="btn ghost-line" id="markVacBtn" style="margin-top:10px">+ סימון חופשה שנוצלה</button>
   </div>`;
 
   // --- recreation ---
@@ -1170,11 +1177,18 @@ function renderMore() {
 
 // ------------------------------------------------------------------ payroll settings
 let payrollFormSnapshot = '';
+let payrollTravelMode = 'none'; // 'none' | 'perDay' | 'monthly' — chosen in the travel seg control
 function serializePayrollForm() {
-  return JSON.stringify(['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pTravelDay']
-    .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
+  const vals = ['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pTravelDay', 'pTravelMonth']
+    .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value));
+  return JSON.stringify([...vals, payrollTravelMode]);
 }
 function isPayrollDirty() { return serializePayrollForm() !== payrollFormSnapshot; }
+function renderTravelMode() {
+  $('pTravelMode').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.mode === payrollTravelMode));
+  $('pTravelPerDayField').hidden = payrollTravelMode !== 'perDay';
+  $('pTravelMonthlyField').hidden = payrollTravelMode !== 'monthly';
+}
 function openPayroll() {
   const p = payrollOf(store.settings);
   $('pOvertime').checked = !!p.overtime;
@@ -1187,6 +1201,9 @@ function openPayroll() {
   $('pRecDays').value = p.recreationDays;
   $('pRecRate').value = p.recreationDayRate;
   $('pTravelDay').value = p.travelPerDay;
+  $('pTravelMonth').value = p.travelMonthly;
+  payrollTravelMode = p.travelMode;
+  renderTravelMode();
   payrollFormSnapshot = serializePayrollForm();
   openSheet($('payrollSheet'));
 }
@@ -1208,12 +1225,63 @@ function submitPayroll(ev) {
     annualVacationDays: num('pVacDays', 0),
     recreationDays: num('pRecDays', 0),
     recreationDayRate: num('pRecRate', 0),
+    travelMode: payrollTravelMode,
     travelPerDay: num('pTravelDay', 0),
+    travelMonthly: num('pTravelMonth', 0),
   } });
   payrollFormSnapshot = serializePayrollForm();
   closeSheet($('payrollSheet'));
   renderMore();
   toast('הגדרות השכר נשמרו');
+}
+
+// ------------------------------------------------------------------ quick vacation-days entry
+let vqDate = todayISO();
+function fmtDateShort(iso) { const d = parseDate(iso); return `${d.getDate()} ב${MONTHS[d.getMonth()]}`; }
+// Walks forward from startISO collecting `days` calendar dates, optionally
+// skipping weekdays marked as non-work (settings.offDays) — a vacation day
+// only "counts" on a day you'd otherwise have worked. Capped at a 90-day
+// lookahead so an all-days-off configuration can't loop forever.
+function computeVacDates(startISO, days, skipOff) {
+  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
+  const dates = [];
+  let d = parseDate(startISO), guard = 0;
+  while (dates.length < days && guard < 90) {
+    if (!(skipOff && offDays.includes(d.getDay()))) dates.push(toISO(d));
+    d = new Date(d); d.setDate(d.getDate() + 1);
+    guard++;
+  }
+  return dates;
+}
+function renderVacQuickPreview() {
+  const days = Number($('vqDays').value) || 1;
+  const dates = computeVacDates(vqDate, days, $('vqSkipOff').checked);
+  $('vqPreview').textContent = dates.length
+    ? `יתווספו ${dates.length} ימי חופשה: ${fmtDateShort(dates[0])} – ${fmtDateShort(dates[dates.length - 1])}`
+    : 'לא נמצאו ימים מתאימים';
+}
+function openVacQuick() {
+  vqDate = todayISO();
+  $('vqDateText').textContent = fmtDateShort(vqDate);
+  setStepper('vqDays', 1);
+  $('vqSkipOff').checked = true;
+  renderVacQuickPreview();
+  openSheet($('vacQuickSheet'));
+}
+function submitVacQuick(ev) {
+  ev.preventDefault();
+  const days = Number($('vqDays').value) || 1;
+  const dates = computeVacDates(vqDate, days, $('vqSkipOff').checked);
+  if (!dates.length) { toast('לא נמצאו ימים מתאימים'); return; }
+  const alreadyTaken = new Set(store.entries.map((e) => e.date));
+  const toAdd = dates.filter((iso) => !alreadyTaken.has(iso)).map((date) => ({ type: 'vacation', date, jobId: '', start: '', end: '', breakMin: 0, rate: '', note: '' }));
+  if (!toAdd.length) { toast('כל הימים שנבחרו כבר קיימים ברישום'); return; }
+  const created = store.addEntries(toAdd);
+  const skipped = dates.length - toAdd.length;
+  const d0 = parseDate(dates[0]); viewYear = d0.getFullYear(); viewMonth = d0.getMonth();
+  closeSheet($('vacQuickSheet'));
+  renderMonth(); renderAll(); renderMore();
+  toast(skipped ? `נוספו ${created.length} ימי חופשה (${skipped} דולגו — כבר קיים רישום)` : `נוספו ${created.length} ימי חופשה`);
 }
 
 // ------------------------------------------------------------------ tabs
@@ -1715,9 +1783,32 @@ function bind() {
   $('payrollBtn').onclick = openPayroll;
   $('closePayroll').onclick = tryClosePayroll;
   $('payrollForm').onsubmit = submitPayroll;
+  $('pTravelMode').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return;
+    payrollTravelMode = b.dataset.mode;
+    renderTravelMode();
+  });
   $('moreCards').addEventListener('click', (e) => {
     const y = e.target.closest('button[data-yr]');
-    if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); }
+    if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); return; }
+    if (e.target.closest('#markVacBtn')) openVacQuick();
+  });
+  $('closeVacQuick').onclick = () => closeSheet($('vacQuickSheet'));
+  $('vacQuickForm').onsubmit = submitVacQuick;
+  $('vqDateBtn').onclick = () => openDatePicker({
+    title: 'תאריך התחלה',
+    valueISO: vqDate,
+    onConfirm: (iso) => { vqDate = iso; $('vqDateText').textContent = fmtDateShort(iso); renderVacQuickPreview(); },
+  });
+  $('vqSkipOff').addEventListener('change', renderVacQuickPreview);
+  $('vacQuickForm').addEventListener('click', (e) => {
+    const btn = e.target.closest('.stepper-btn'); if (!btn) return;
+    const wrap = btn.closest('.stepper');
+    const id = wrap.dataset.target;
+    const min = Number(wrap.dataset.min), max = Number(wrap.dataset.max);
+    const v = Math.min(max, Math.max(min, Number($(id).value) + Number(btn.dataset.step)));
+    setStepper(id, v);
+    renderVacQuickPreview();
   });
 
   $('addBtn').onclick = () => openEntry(null);
@@ -1954,7 +2045,7 @@ function bind() {
     noteSheet: { isDirty: isNoteDirty, tryClose: tryCloseNote },
     catSheet: { isDirty: isCatDirty, tryClose: tryCloseCat },
   };
-  const DIRECT_CLOSE_SHEETS = ['exportSheet', 'noteViewSheet', 'catManageSheet'];
+  const DIRECT_CLOSE_SHEETS = ['exportSheet', 'noteViewSheet', 'catManageSheet', 'vacQuickSheet'];
   Object.entries(SHEET_GUARDS).forEach(([id, g]) => $(id).addEventListener('click', (e) => { if (e.target.id === id) g.tryClose(); }));
   DIRECT_CLOSE_SHEETS.forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 

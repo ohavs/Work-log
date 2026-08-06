@@ -13,11 +13,20 @@ export const DEFAULT_PAYROLL = {
   recreationDayRate: 418,// מחיר יום הבראה (₪)
   recreationDays: 5,     // ימי הבראה בשנה
   annualVacationDays: 12,// ימי חופשה שנתיים
-  travelPerDay: 0,       // החזר נסיעות ליום עבודה (₪) — לא ממוסה, מתווסף ישירות לנטו
+  travelMode: 'none',    // 'none' | 'perDay' | 'monthly' — only one travel calculation is ever active
+  travelPerDay: 0,       // החזר נסיעות ליום עבודה (₪), used when travelMode === 'perDay'
+  travelMonthly: 0,      // סכום נסיעות חודשי קבוע (₪), used when travelMode === 'monthly'
 };
 
 export function payrollOf(settings) {
-  return { ...DEFAULT_PAYROLL, ...(settings.payroll || {}) };
+  const p = { ...DEFAULT_PAYROLL, ...(settings.payroll || {}) };
+  // Back-compat: users who set a per-day travel amount before travelMode
+  // existed had no way to record a mode — infer 'perDay' so their existing
+  // value keeps working exactly as before, without needing to re-select it.
+  if (!settings.payroll || settings.payroll.travelMode == null) {
+    p.travelMode = p.travelPerDay > 0 ? 'perDay' : 'none';
+  }
+  return p;
 }
 
 export function rateOf(e, settings) {
@@ -66,15 +75,23 @@ export function grossForMonth(entries, settings, y, m) {
   return { gross, hours, ot125, ot150 };
 }
 
-// Travel/commute reimbursement for a month: a fixed ₪ amount per day actually
-// worked. Kept separate from gross — untaxed, not pensionable — and added
-// straight to net, matching how travel reimbursement works in Israeli payroll.
+// Travel/commute reimbursement for a month — either a fixed ₪ amount per day
+// actually worked, or one fixed ₪ amount for the whole month (mutually
+// exclusive, per travelMode). Kept separate from gross — untaxed, not
+// pensionable — and added straight to net, matching how travel reimbursement
+// works in Israeli payroll.
 export function travelForMonth(entries, settings, y, m) {
   const p = payrollOf(settings);
   const days = new Set();
   entries.forEach((e) => { if (inMonth(e, y, m) && isWork(e)) days.add(e.date); });
-  const perDay = Number(p.travelPerDay) || 0;
-  return { days: days.size, perDay, total: days.size * perDay };
+  if (p.travelMode === 'monthly') {
+    return { days: days.size, perDay: 0, total: Number(p.travelMonthly) || 0 };
+  }
+  if (p.travelMode === 'perDay') {
+    const perDay = Number(p.travelPerDay) || 0;
+    return { days: days.size, perDay, total: days.size * perDay };
+  }
+  return { days: days.size, perDay: 0, total: 0 };
 }
 
 // Estimated payslip: gross → deductions → net (+ untaxed travel reimbursement).
