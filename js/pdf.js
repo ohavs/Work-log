@@ -57,14 +57,19 @@ function buildReport(el, { entries, settings, year, month }) {
   return `שעות-עבודה-${MONTHS[month]}-${year}`;
 }
 
-export async function exportPDF({ entries, settings, year, month }) {
+export function exportPDF({ entries, settings, year, month }) {
   const el = document.getElementById('pdfReport');
   const fileBase = buildReport(el, { entries, settings, year, month });
   const prevTitle = document.title;
   document.title = fileBase; // becomes the suggested filename in "Save as PDF"
   const cleanup = () => { document.title = prevTitle; el.innerHTML = ''; window.removeEventListener('afterprint', cleanup); };
   window.addEventListener('afterprint', cleanup);
-  setTimeout(() => window.print(), 60); // let the DOM paint before print grabs it
+  // Must run synchronously, in the same task as the click that triggered this
+  // — deferring it even by a 0ms setTimeout can drop the "user activation"
+  // that window.print() requires, making it silently do nothing on some
+  // browsers. @media print recomputes layout for #pdfReport at call time, so
+  // there's no need to wait for a paint frame first.
+  window.print();
   setTimeout(cleanup, 60000); // safety net if afterprint never fires (e.g. dialog dismissed oddly)
   return { method: 'print' };
 }

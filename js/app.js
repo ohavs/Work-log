@@ -322,25 +322,50 @@ function ringSVG(pctRaw, label, sub, caption) {
 // "+2:15" / "−1:40" — a signed hour label for a goal comparison.
 function fmtDiff(mins) { return `${mins < 0 ? '−' : '+'}${fmtHours(Math.abs(mins))}`; }
 
-// Groups `entries` (already scoped to one month, e.g. via monthEntries()) by
-// ISO week and compares each week's actual hours to the weekly goal — but a
-// week that straddles a month boundary only has some of its 7 days inside
-// `y`/`m` (the entries passed in only cover those days too), so the goal is
-// prorated by how many of the week's 7 calendar days actually fall in this
-// month. A week with only 3 of its days in this month is judged against
-// 3/7 of the weekly goal, not the full week's goal.
-function weeklyGoalBreakdown(entries, y, m) {
+// Hours expected per *scheduled* workday, derived from the weekly goal and
+// how many weekdays are actually worked (settings.offDays) — e.g. 44h/week
+// over a Sun–Thu schedule (5 workdays, Fri/Sat off) is 8:48/day, not 44/7.
+// This is the same "תקן שעות" math a real payslip uses, and — critically —
+// it's what makes a week split across a month boundary compare fairly: a
+// single weekday is judged against one real day's target, not an arbitrary
+// slice of a 7-day week that includes days you never work anyway. Without
+// this, a boundary week could show a false "surplus" for a single day that's
+// actually a shortfall, just because the old math compared it to 1/7 of the
+// full week instead of 1/5 (or however many days you actually work).
+function dailyHourTarget() {
   const goalW = Number(store.settings.goalWeekHours) || 0;
+  if (!goalW) return 0;
+  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
+  const workDaysPerWeek = Math.max(1, 7 - offDays.length);
+  return goalW / workDaysPerWeek;
+}
+function isScheduledWorkday(date) {
+  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
+  return !offDays.includes(date.getDay());
+}
+
+// Groups `entries` (already scoped to one month, e.g. via monthEntries()) by
+// ISO week and compares each week's actual hours to what was expected —
+// counting only the week's *scheduled workdays* that fall inside `y`/`m`,
+// each judged at the real daily rate (see dailyHourTarget). Summing every
+// week's diffMins this way is mathematically identical to comparing the
+// month's total hours against one combined monthly target — no separate
+// monthly-only calculation needed, and no boundary-week distortion.
+function weeklyGoalBreakdown(entries, y, m) {
+  const daily = dailyHourTarget();
   const weeks = new Map();
   entries.forEach((e) => { if (!isWork(e)) return; const wk = weekStartISO(parseDate(e.date)); weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e)); });
   return [...weeks.entries()].filter(([, mins]) => mins > 0).sort((a, b) => a[0].localeCompare(b[0])).map(([wk, mins]) => {
-    let daysInMonth = 0;
+    let scheduledDaysInMonth = 0;
     const start = parseDate(wk);
-    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); if (d.getFullYear() === y && d.getMonth() === m) daysInMonth++; }
-    const hasGoal = goalW > 0;
-    const goalMins = hasGoal ? Math.round(goalW * 60 * (daysInMonth / 7)) : 0;
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      if (d.getFullYear() === y && d.getMonth() === m && isScheduledWorkday(d)) scheduledDaysInMonth++;
+    }
+    const hasGoal = daily > 0;
+    const goalMins = hasGoal ? Math.round(daily * 60 * scheduledDaysInMonth) : 0;
     const diffMins = hasGoal ? mins - goalMins : 0;
-    return { wk, mins, daysInMonth, hasGoal, goalMins, diffMins };
+    return { wk, mins, scheduledDaysInMonth, hasGoal, goalMins, diffMins };
   });
 }
 
@@ -1042,11 +1067,13 @@ async function handleAuth() {
 
 // ------------------------------------------------------------------ export
 function openExport() { if (!monthEntries().length) { toast('אין רישומים לייצוא בחודש זה'); return; } openSheet($('exportSheet')); }
-async function runExportPdf() {
+function runExportPdf() {
+  // Stays fully synchronous end-to-end (no await, no setTimeout anywhere in
+  // this chain) — window.print() requires the browser's "user activation"
+  // from the click, which an async gap can silently drop on some browsers.
   closeSheet($('exportSheet'));
-  toast('מכין PDF…');
   try {
-    await exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
+    exportPDF({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth });
     toast('בחרו "שמירה כ‑PDF" בחלון ההדפסה');
   } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑PDF'); }
 }
