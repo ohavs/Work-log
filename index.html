@@ -15,10 +15,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="apple-mobile-web-app-title" content="שעות עבודה" />
 
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Hebrew:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-
+  <!-- Noto Sans Hebrew is self-hosted (see css/styles.css @font-face rules,
+       fonts/noto-sans-hebrew/) instead of loaded from Google Fonts — a
+       cross-origin font fetch was a likely cause of unreliable PDF export
+       (html2canvas has to fetch+inline every font it rasterizes text with). -->
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>

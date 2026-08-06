@@ -1,12 +1,14 @@
 // PDF export — renders the styled RTL report to a real downloadable .pdf
 // file via jsPDF + html2canvas, loaded from local files (js/vendor/, no CDN
-// — the earlier CDN-based version could fail offline or behind stricter
-// network/CSP policies). The previous blank-PDF bug was html2canvas
-// capturing #pdfReport while it was parked off-screen at -9999px, which
-// browsers don't reliably paint; it's now kept in-flow inside a
-// zero-height, overflow-hidden wrapper instead (see .pdf-report-wrap).
-// Falls back to the browser's native print-to-PDF only if the file
-// generation itself throws.
+// — a CDN-hosted library, or a CDN-hosted webfont, can fail offline or
+// behind stricter network/CSP policies, and is one less thing to debug when
+// something goes wrong on a device we can't see). #pdfReport is kept
+// in-flow inside a zero-height, overflow-hidden wrapper (.pdf-report-wrap)
+// rather than positioned off-screen, since browsers don't reliably paint
+// content parked far outside the viewport. Multi-page reports are captured
+// one page at a time (see renderToFile) rather than as one giant image
+// sliced apart — see the comment on groupRowsByPage for why. Falls back to
+// the browser's native print-to-PDF only if file generation itself throws.
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
 import { payrollOf, rateOf } from './finance.js';
 
@@ -70,20 +72,124 @@ function buildReport(el, { entries, settings, year, month }) {
   return `שעות-עבודה-${MONTHS[month]}-${year}`;
 }
 
+// Group table rows into pages by their real rendered height, so a page
+// break only ever falls BETWEEN rows, never through one. Page 1 has less
+// room for rows than later pages (the title/subtitle/summary cards sit
+// above the table there); every later page instead starts with a cloned
+// header row, so column labels are never missing.
+//
+// Earlier attempts captured the WHOLE report as one tall canvas and then
+// either (a) sliced/repositioned that single image per page — jsPDF's
+// clip()/saveGraphicsState() silently failed to restrict drawing at all in
+// this bundled build, leaving the image bleeding past every margin — or
+// (b) pre-cropped per-page canvases from that one giant capture, which
+// fixed the bleeding but turned out to depend on a single very large,
+// complex html2canvas() capture that unreliably dropped background colors/
+// borders (cards + header shading) on some runs while leaving text intact —
+// consistent with a known html2canvas limitation on large/complex captures.
+// Capturing each page separately (by hiding every row that doesn't belong
+// to it) keeps every individual html2canvas() call small and simple, which
+// resolved that reliability problem in testing.
+function groupRowsByPage(el, table, pageHeightPx) {
+  const intro = [...el.children].filter((c) => c !== table && !c.classList.contains('pdf-foot'));
+  const theadRow = table.querySelector('thead tr');
+  const tbody = table.querySelector('tbody');
+  const rows = [...tbody.querySelectorAll('tr')];
+  const elRect = el.getBoundingClientRect();
+  // Measured as position deltas, not summed element heights — an element's
+  // own getBoundingClientRect().height is its border box only and excludes
+  // margin entirely, so summing individual heights silently drops every
+  // margin gap between them (e.g. the summary cards' margin-bottom, the
+  // closing line's margin-top). Position deltas capture the true rendered
+  // space regardless of what's creating the gap.
+  const introHeight = table.getBoundingClientRect().top - elRect.top;
+  const theadH = theadRow.getBoundingClientRect().height;
+  // tfoot + the closing "generated on <date>" line only ever render on the
+  // last page, but WHICH page ends up last isn't known while grouping rows
+  // — so their height is reserved out of every page's budget uniformly.
+  // Slightly conservative (a little unused space on non-final pages) but
+  // guarantees the actual last page always has room for them.
+  const tailHeight = elRect.bottom - tbody.getBoundingClientRect().bottom;
+  const groups = [[]];
+  let used = 0, budget = pageHeightPx - introHeight - tailHeight;
+  for (const row of rows) {
+    const h = row.getBoundingClientRect().height;
+    if (groups[groups.length - 1].length && used + h > budget) {
+      groups.push([]);
+      used = 0;
+      budget = pageHeightPx - theadH - tailHeight;
+    }
+    groups[groups.length - 1].push(row);
+    used += h;
+  }
+  return { intro, theadRow, rows, groups };
+}
+
 async function renderToFile(el, fileBase) {
   const jsPDF = window.jspdf && window.jspdf.jsPDF;
   const html2canvas = window.html2canvas;
   if (!jsPDF || !html2canvas) throw new Error('PDF libraries not loaded (js/vendor/ scripts missing or blocked)');
-  const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
-  const img = canvas.toDataURL('image/jpeg', 0.95);
+
+  // Wait for the report's webfont to actually finish loading before
+  // measuring/capturing it — html2canvas has to rasterize with whatever
+  // font is active at that instant, and capturing mid-swap (fallback font
+  // still showing) can throw off row-height measurements.
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch {} }
+
+  // Export is triggered from a real click that just closed the export-choice
+  // sheet (a .2s CSS transition) — capturing while that's still settling was
+  // caught intermittently losing background colors and borders (cards, table
+  // header shading) while text still rendered fine. Reproduced reliably when
+  // triggered by an actual dispatched click event, never when the same
+  // export function was called directly (i.e. with no pending sheet
+  // transition) — two animation frames wasn't enough to fix it, only a real
+  // wait past the transition's duration was.
+  await new Promise((r) => setTimeout(r, 350));
+
   const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
   const pageW = pdf.internal.pageSize.getWidth();
   const pageH = pdf.internal.pageSize.getHeight();
-  const imgH = (canvas.height * pageW) / canvas.width;
-  let remaining = imgH, position = 0;
-  pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST');
-  remaining -= pageH;
-  while (remaining > 0) { position -= pageH; pdf.addPage(); pdf.addImage(img, 'JPEG', 0, position, pageW, imgH, undefined, 'FAST'); remaining -= pageH; }
+  const margin = 30; // real page margins on every side, every page — not edge-to-edge image bleed
+  const contentW = pageW - margin * 2;
+  const contentH = pageH - margin * 2;
+  const elWidthPx = el.getBoundingClientRect().width || 794;
+  const pageHeightPx = contentH * (elWidthPx / contentW); // one page's height, in the report's own CSS-px coordinate space
+
+  const table = el.querySelector('table');
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  const tfoot = table.querySelector('tfoot');
+  const foot = el.querySelector('.pdf-foot');
+  const { intro, theadRow, rows, groups } = groupRowsByPage(el, table, pageHeightPx);
+
+  const hideAllRows = () => rows.forEach((r) => { r.style.display = 'none'; });
+
+  let clonedHead = null, first = true;
+  for (let i = 0; i < groups.length; i++) {
+    const isLast = i === groups.length - 1;
+    hideAllRows();
+    groups[i].forEach((r) => { r.style.display = ''; });
+    intro.forEach((n) => { n.style.display = i === 0 ? '' : 'none'; });
+    // The original <thead> only makes sense on page 1 (right above its own
+    // rows) — every later page gets a cloned header row inserted into tbody
+    // instead, positioned right above THAT page's first row.
+    thead.style.display = i === 0 ? '' : 'none';
+    if (i > 0) {
+      clonedHead = theadRow.cloneNode(true);
+      tbody.insertBefore(clonedHead, groups[i][0]);
+    }
+    if (tfoot) tfoot.style.display = isLast ? '' : 'none';
+    if (foot) foot.style.display = isLast ? '' : 'none';
+
+    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    const img = canvas.toDataURL('image/png');
+    const drawH = Math.min(contentH, (canvas.height * contentW) / canvas.width);
+    if (!first) pdf.addPage();
+    pdf.addImage(img, 'PNG', margin, margin, contentW, drawH);
+    first = false;
+
+    if (clonedHead) { clonedHead.remove(); clonedHead = null; }
+  }
   pdf.save(`${fileBase}.pdf`);
 }
 

@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v56';
+const CACHE = 'worklog-v58';
 const SHELL = [
   './',
   './index.html',
@@ -15,6 +15,18 @@ const SHELL = [
   './js/config.js',
   './js/vendor/jspdf.umd.min.js',
   './js/vendor/html2canvas-pro.min.js',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-400-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-400-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-500-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-500-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-600-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-600-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-700-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-700-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-800-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-800-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-900-normal.woff2',
+  './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-900-normal.woff2',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -89,7 +101,8 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Cross-origin (Google Fonts): stale-while-revalidate.
+  // Any other cross-origin request: stale-while-revalidate (nothing routes
+  // here normally now that fonts are self-hosted, but harmless as a fallback).
   e.respondWith(
     caches.match(req).then((hit) => {
       const net = fetch(req).then((res) => {
