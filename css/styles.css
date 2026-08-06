@@ -142,6 +142,13 @@ svg { display: block; }
 .reminder-banner.warn { background: color-mix(in srgb, #e8a13a 20%, var(--card)); }
 .reminder-banner.warn .rb-ic { color: #c9780a; }
 
+.update-banner { display: flex; align-items: center; gap: 10px; margin: 0 20px 14px; padding: 12px 14px; border-radius: var(--radius-sm); background: var(--primary-soft); color: var(--fg); box-shadow: var(--shadow-sm); animation: fade .25s ease; }
+.update-banner .ub-ic { display: grid; place-items: center; width: 22px; height: 22px; color: var(--primary); flex: 0 0 auto; }
+.update-banner .ub-ic svg { width: 20px; height: 20px; }
+.update-banner .ub-text { flex: 1; font-size: 14px; font-weight: 700; }
+.update-banner .ub-btn { flex: 0 0 auto; font-size: 13.5px; font-weight: 800; color: #fff; background: var(--primary); padding: 8px 14px; border-radius: 999px; }
+.update-banner .ub-btn:active { transform: scale(.96); }
+
 /* ============================================================
    HISTORY
    ============================================================ */

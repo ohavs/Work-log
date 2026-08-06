@@ -29,6 +29,15 @@
     <button class="icon-btn" id="themeToggle" aria-label="מצב כהה או בהיר"></button>
   </header>
 
+  <!-- Shown once a new version has finished installing itself in the
+       background — confirms you're on the latest build instead of
+       guessing, and reload is one tap away. -->
+  <div class="update-banner" id="updateBanner" hidden>
+    <span class="ub-ic" data-ic="refresh"></span>
+    <span class="ub-text">גרסה חדשה זמינה</span>
+    <button type="button" class="ub-btn" id="updateBannerBtn">רענון עכשיו</button>
+  </div>
+
   <main class="app">
     <!-- ============ HOME view — one-tap clock in / out ============ -->
     <section class="view" id="viewHome">

@@ -2134,11 +2134,33 @@ async function main() {
   await store.init();
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); renderAll(); updateAccountUI();
   startReminderLoop();
-  if ('serviceWorker' in navigator) {
-    // Register only. A new SW activates quietly in the background; because the
-    // app is network-first, content is already fresh on each open — so we do
-    // NOT force a page reload (that caused a jarring mid-use refresh).
-    navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => {});
-  }
+  if ('serviceWorker' in navigator) initUpdateChecking();
 }
 main();
+
+// A new SW installs and activates itself automatically in the background
+// (sw.js calls skipWaiting()+clients.claim() unconditionally) — but the
+// already-loaded page's HTML/JS stay exactly as they were until reloaded,
+// so there was previously no way to tell whether you were actually on the
+// latest version. navigator.serviceWorker.oncontrollerchange fires the
+// moment a new worker takes over an open tab; the only wrinkle is that it
+// ALSO fires once on a page's very first-ever load (uncontrolled → controlled),
+// which isn't a real "update" — guarded against below by only reacting once
+// this tab already had a controller.
+function initUpdateChecking() {
+  navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+    // Re-check for a newer sw.js whenever the app is brought back to the
+    // foreground, not just on the browser's own (less predictable) schedule
+    // — this is exactly the "reopened the app, is it current?" moment.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update().catch(() => {}); });
+  }).catch(() => {});
+
+  const hadController = !!navigator.serviceWorker.controller;
+  let shown = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || shown) return;
+    shown = true;
+    $('updateBanner').hidden = false;
+  });
+  $('updateBannerBtn').onclick = () => location.reload();
+}
