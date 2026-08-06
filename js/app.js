@@ -264,10 +264,12 @@ function renderStats(entries) {
     if (t === 'sick') { sick.add(e.date); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
+  const travelPerDay = Number(payrollOf(store.settings).travelPerDay) || 0;
+  totalPay += travelPerDay * workDays.size;
   $('statHours').textContent = fmtHours(totalMin);
   $('statDays').textContent = workDays.size;
   const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate);
+  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPerDay > 0;
   $('statPayCard').hidden = !anyRate;
   if (anyRate) $('statPay').textContent = fmtMoney(totalPay, store.settings.currency);
 
@@ -340,9 +342,12 @@ function renderMonthlyReport(entries) {
     if (t === 'sick') { sick.add(e.date); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
+  const travelPerDay = Number(payrollOf(store.settings).travelPerDay) || 0;
+  const travelPay = travelPerDay * workDays.size;
+  totalPay += travelPay;
   const goalM = Number(store.settings.goalHours) || 0;
   const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate);
+  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0;
 
   const rows = [];
   if (goalM > 0) {
@@ -353,7 +358,7 @@ function renderMonthlyReport(entries) {
   } else {
     rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-val">${fmtHours(totalMin)}</span></div>`);
   }
-  if (anyRate) rows.push(`<div class="week-row"><span class="week-name">שכר</span><span class="week-val">${fmtMoney(totalPay, store.settings.currency)}</span></div>`);
+  if (anyRate) rows.push(`<div class="week-row"><span class="week-name">שכר${travelPay ? ' (כולל נסיעות)' : ''}</span><span class="week-val">${fmtMoney(totalPay, store.settings.currency)}</span></div>`);
   rows.push(`<div class="week-row"><span class="week-name">ימי עבודה</span><span class="week-val">${workDays.size}</span></div>`);
   if (vac.size) rows.push(`<div class="week-row"><span class="week-name">ימי חופשה</span><span class="week-val">${vac.size}</span></div>`);
   if (sick.size) rows.push(`<div class="week-row"><span class="week-name">ימי מחלה</span><span class="week-val">${sick.size}</span></div>`);
@@ -1043,6 +1048,7 @@ function renderMore() {
         ${ps.incomeTax ? `<div class="frow minus"><span class="fk">מס הכנסה (${p.incomeTax}%)</span><span class="fv">−${money(ps.incomeTax)}</span></div>` : ''}
         ${ps.socialHealth ? `<div class="frow minus"><span class="fk">ביטוח לאומי + בריאות (${p.socialHealth}%)</span><span class="fv">−${money(ps.socialHealth)}</span></div>` : ''}
         ${ps.pension ? `<div class="frow minus"><span class="fk">פנסיה עובד (${p.pensionEmployee}%)</span><span class="fv">−${money(ps.pension)}</span></div>` : ''}
+        ${ps.travel ? `<div class="frow plus"><span class="fk">נסיעות</span><span class="fv">+${money(ps.travel)}</span></div>` : ''}
         <div class="frow total"><span class="fk">נטו</span><span class="fv">${money(ps.net)}</span></div>
       </div>` : `<div class="hint-row">אין שעות עבודה בחודש זה. הגדירו שכר לשעה כדי לראות הערכה.</div>`}
   </div>`;
@@ -1134,7 +1140,7 @@ function renderMore() {
 // ------------------------------------------------------------------ payroll settings
 let payrollFormSnapshot = '';
 function serializePayrollForm() {
-  return JSON.stringify(['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate']
+  return JSON.stringify(['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pTravelDay']
     .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value)));
 }
 function isPayrollDirty() { return serializePayrollForm() !== payrollFormSnapshot; }
@@ -1149,6 +1155,7 @@ function openPayroll() {
   $('pVacDays').value = p.annualVacationDays;
   $('pRecDays').value = p.recreationDays;
   $('pRecRate').value = p.recreationDayRate;
+  $('pTravelDay').value = p.travelPerDay;
   payrollFormSnapshot = serializePayrollForm();
   openSheet($('payrollSheet'));
 }
@@ -1170,6 +1177,7 @@ function submitPayroll(ev) {
     annualVacationDays: num('pVacDays', 0),
     recreationDays: num('pRecDays', 0),
     recreationDayRate: num('pRecRate', 0),
+    travelPerDay: num('pTravelDay', 0),
   } });
   payrollFormSnapshot = serializePayrollForm();
   closeSheet($('payrollSheet'));

@@ -13,6 +13,7 @@ export const DEFAULT_PAYROLL = {
   recreationDayRate: 418,// מחיר יום הבראה (₪)
   recreationDays: 5,     // ימי הבראה בשנה
   annualVacationDays: 12,// ימי חופשה שנתיים
+  travelPerDay: 0,       // החזר נסיעות ליום עבודה (₪) — לא ממוסה, מתווסף ישירות לנטו
 };
 
 export function payrollOf(settings) {
@@ -65,7 +66,18 @@ export function grossForMonth(entries, settings, y, m) {
   return { gross, hours, ot125, ot150 };
 }
 
-// Estimated payslip: gross → deductions → net.
+// Travel/commute reimbursement for a month: a fixed ₪ amount per day actually
+// worked. Kept separate from gross — untaxed, not pensionable — and added
+// straight to net, matching how travel reimbursement works in Israeli payroll.
+export function travelForMonth(entries, settings, y, m) {
+  const p = payrollOf(settings);
+  const days = new Set();
+  entries.forEach((e) => { if (inMonth(e, y, m) && isWork(e)) days.add(e.date); });
+  const perDay = Number(p.travelPerDay) || 0;
+  return { days: days.size, perDay, total: days.size * perDay };
+}
+
+// Estimated payslip: gross → deductions → net (+ untaxed travel reimbursement).
 export function payslip(entries, settings, y, m) {
   const p = payrollOf(settings);
   const { gross, hours, ot125, ot150 } = grossForMonth(entries, settings, y, m);
@@ -73,8 +85,9 @@ export function payslip(entries, settings, y, m) {
   const socialHealth = gross * (p.socialHealth / 100);
   const pension = gross * (p.pensionEmployee / 100);
   const deductions = incomeTax + socialHealth + pension;
-  const net = Math.max(0, gross - deductions);
-  return { gross, hours, ot125, ot150, incomeTax, socialHealth, pension, deductions, net };
+  const travel = travelForMonth(entries, settings, y, m).total;
+  const net = Math.max(0, gross - deductions) + travel;
+  return { gross, hours, ot125, ot150, incomeTax, socialHealth, pension, deductions, travel, net };
 }
 
 // Pension accrual for a month (employee + employer + severance).

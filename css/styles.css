@@ -539,6 +539,7 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .frow .fk { color: var(--muted-fg); font-weight: 600; }
 .frow .fv { font-weight: 700; }
 .frow.minus .fv { color: var(--danger); }
+.frow.plus .fv { color: var(--primary); }
 .frow.total { border-top: 2px solid var(--border); margin-top: 4px; padding-top: 12px; font-size: 16px; }
 .frow.total .fk { color: var(--fg); font-weight: 800; }
 .frow.total .fv { font-weight: 900; color: var(--primary); }

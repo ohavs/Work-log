@@ -228,7 +228,7 @@
             <span class="field-label">שכר לשעה</span>
             <div class="input-wrap">
               <span class="input-prefix">₪</span>
-              <input type="number" id="fRate" min="0" step="0.5" inputmode="decimal" placeholder="לפי ההגדרות" />
+              <input type="number" id="fRate" min="0" step="any" inputmode="decimal" placeholder="לפי ההגדרות" />
             </div>
           </div>
           <div class="field">
@@ -264,13 +264,13 @@
         </div>
         <div class="field">
           <span class="field-label">שכר לשעה</span>
-          <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="0.5" inputmode="decimal" value="0" /></div>
+          <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="any" inputmode="decimal" value="0" /></div>
         </div>
         <div class="field">
           <span class="field-label">יעד שעות <em>(למד ההתקדמות בדוחות)</em></span>
           <div class="time-grid">
-            <div class="input-wrap"><input type="number" id="sGoalWeek" min="0" step="1" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / שבוע</span></div>
-            <div class="input-wrap"><input type="number" id="sGoal" min="0" step="1" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / חודש</span></div>
+            <div class="input-wrap"><input type="number" id="sGoalWeek" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / שבוע</span></div>
+            <div class="input-wrap"><input type="number" id="sGoal" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / חודש</span></div>
           </div>
         </div>
 
@@ -317,7 +317,7 @@
             <div class="stepper" data-target="sShiftRemind" data-min="1" data-max="23">
               <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
               <span class="stepper-val"><b id="sShiftRemindVal">9</b> ש׳</span>
-              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+              <button type="button" class="stepper-btn" data-step="any" aria-label="יותר שעות">+</button>
             </div>
           </div>
           <div class="stepper-row">
@@ -325,7 +325,7 @@
             <div class="stepper" data-target="sShiftMax" data-min="2" data-max="24">
               <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
               <span class="stepper-val"><b id="sShiftMaxVal">12</b> ש׳</span>
-              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+              <button type="button" class="stepper-btn" data-step="any" aria-label="יותר שעות">+</button>
             </div>
           </div>
           <input type="hidden" id="sShiftRemind" value="9" />
@@ -476,7 +476,7 @@
       </div>
       <form id="jobForm" class="form">
         <div class="field big"><span class="field-label">שם המקום</span><input type="text" id="jName" maxlength="30" placeholder="למשל: מסעדה, משמרות, פרויקט" required /></div>
-        <div class="field"><span class="field-label">שכר לשעה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="jRate" min="0" step="0.5" inputmode="decimal" placeholder="0" /></div></div>
+        <div class="field"><span class="field-label">שכר לשעה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="jRate" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
         <button type="submit" class="btn accent big">שמירה</button>
       </form>
     </div>
@@ -502,27 +502,33 @@
         <div class="fieldset">
           <div class="fieldset-title">ניכויים משכר (%)</div>
           <div class="time-grid">
-            <div class="field"><span class="field-label">מס הכנסה</span><div class="input-wrap"><input type="number" id="pIncomeTax" min="0" max="60" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
-            <div class="field"><span class="field-label">ביטוח לאומי + בריאות</span><div class="input-wrap"><input type="number" id="pSocialHealth" min="0" max="20" step="0.1" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">מס הכנסה</span><div class="input-wrap"><input type="number" id="pIncomeTax" min="0" max="60" step="any" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">ביטוח לאומי + בריאות</span><div class="input-wrap"><input type="number" id="pSocialHealth" min="0" max="20" step="any" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
           </div>
         </div>
 
         <div class="fieldset">
           <div class="fieldset-title">פנסיה (%)</div>
           <div class="time-grid">
-            <div class="field"><span class="field-label">הפרשת עובד</span><div class="input-wrap"><input type="number" id="pPensionEmp" min="0" max="12" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
-            <div class="field"><span class="field-label">הפרשת מעסיק</span><div class="input-wrap"><input type="number" id="pPensionEr" min="0" max="12" step="0.5" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">הפרשת עובד</span><div class="input-wrap"><input type="number" id="pPensionEmp" min="0" max="12" step="any" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+            <div class="field"><span class="field-label">הפרשת מעסיק</span><div class="input-wrap"><input type="number" id="pPensionEr" min="0" max="12" step="any" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
           </div>
-          <div class="field"><span class="field-label">פיצויים (מעסיק)</span><div class="input-wrap"><input type="number" id="pSeverance" min="0" max="12" step="0.01" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
+          <div class="field"><span class="field-label">פיצויים (מעסיק)</span><div class="input-wrap"><input type="number" id="pSeverance" min="0" max="12" step="any" inputmode="decimal" /><span class="input-suffix">%</span></div></div>
         </div>
 
         <div class="fieldset">
           <div class="fieldset-title">זכויות</div>
           <div class="time-grid">
-            <div class="field"><span class="field-label">ימי חופשה בשנה</span><input type="number" id="pVacDays" min="0" max="40" step="1" inputmode="numeric" /></div>
-            <div class="field"><span class="field-label">ימי הבראה בשנה</span><input type="number" id="pRecDays" min="0" max="20" step="1" inputmode="numeric" /></div>
+            <div class="field"><span class="field-label">ימי חופשה בשנה</span><input type="number" id="pVacDays" min="0" max="40" step="any" inputmode="numeric" /></div>
+            <div class="field"><span class="field-label">ימי הבראה בשנה</span><input type="number" id="pRecDays" min="0" max="20" step="any" inputmode="numeric" /></div>
           </div>
-          <div class="field"><span class="field-label">מחיר יום הבראה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pRecRate" min="0" step="1" inputmode="numeric" /></div></div>
+          <div class="field"><span class="field-label">מחיר יום הבראה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pRecRate" min="0" step="any" inputmode="decimal" /></div></div>
+        </div>
+
+        <div class="fieldset">
+          <div class="fieldset-title">נסיעות</div>
+          <div class="field"><span class="field-label">החזר נסיעות ליום עבודה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pTravelDay" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
+          <p class="form-note">מתווסף לשכר לפי מספר ימי העבודה בפועל בחודש — בלי ניכויי מס/פנסיה.</p>
         </div>
 
         <button type="submit" class="btn accent big">שמירה</button>
