@@ -13,6 +13,7 @@ export const DEFAULT_PAYROLL = {
   recreationDayRate: 418,// מחיר יום הבראה (₪)
   recreationDays: 5,     // ימי הבראה בשנה
   annualVacationDays: 12,// ימי חופשה שנתיים
+  sickDayHours: 8.4,     // שעות מזוכות ליום מחלה (יום בתשלום) — 8:24
   travelMode: 'none',    // 'none' | 'perDay' | 'monthly' — only one travel calculation is ever active
   travelPerDay: 0,       // החזר נסיעות ליום עבודה (₪), used when travelMode === 'perDay'
   travelMonthly: 0,      // סכום נסיעות חודשי קבוע (₪), used when travelMode === 'monthly'
@@ -47,6 +48,9 @@ export function splitOvertime(hours, threshold = 8) {
 }
 
 // Gross for a month. With overtime on, tiers are paid 125%/150%.
+// Sick days (יום מחלה) are paid days off — credited at a fixed hours/day
+// (settings.payroll.sickDayHours, default 8.4h) and taxed like regular income, but
+// excluded from the overtime split since no actual shift was worked.
 export function grossForMonth(entries, settings, y, m) {
   const p = payrollOf(settings);
   let gross = 0, hours = 0, ot125 = 0, ot150 = 0;
@@ -54,12 +58,19 @@ export function grossForMonth(entries, settings, y, m) {
   const dayHours = new Map();
   const dayPayFlat = new Map();
   entries.forEach((e) => {
-    if (!inMonth(e, y, m) || !isWork(e)) return;
-    const h = decimalHours(workedMinutes(e));
-    const r = rateOf(e, settings);
-    hours += h;
-    dayHours.set(e.date, (dayHours.get(e.date) || 0) + h);
-    dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
+    if (!inMonth(e, y, m)) return;
+    if (isWork(e)) {
+      const h = decimalHours(workedMinutes(e));
+      const r = rateOf(e, settings);
+      hours += h;
+      dayHours.set(e.date, (dayHours.get(e.date) || 0) + h);
+      dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
+    } else if (entryType(e) === 'sick') {
+      const h = Number(p.sickDayHours) || 0;
+      const r = rateOf(e, settings);
+      hours += h;
+      gross += h * r;
+    }
   });
   for (const [date, h] of dayHours) {
     const flatPay = dayPayFlat.get(date) || 0;

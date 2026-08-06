@@ -46,15 +46,32 @@ export function minToTime(mins) {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+// Raw (pre-break) shift length in minutes, handling an overnight crossing.
+export function rawShiftMinutes(start, end) {
+  const s = timeToMin(start);
+  let e = timeToMin(end);
+  if (s == null || e == null) return 0;
+  if (e < s) e += 1440; // overnight shift (equal times = 0, not 24h)
+  return e - s;
+}
+
 // Worked minutes for an entry (handles crossing midnight + break)
 export function workedMinutes(entry) {
   if (entry.type && entry.type !== 'work') return 0; // vacation / sick = no worked hours
-  const s = timeToMin(entry.start);
-  let e = timeToMin(entry.end);
-  if (s == null || e == null) return 0;
-  if (e < s) e += 1440; // overnight shift (equal times = 0, not 24h)
-  const net = e - s - (Number(entry.breakMin) || 0);
+  const raw = rawShiftMinutes(entry.start, entry.end);
+  const net = raw - (Number(entry.breakMin) || 0);
   return Math.max(0, net);
+}
+
+// A shift of 6+ hours legally requires an unpaid break; suggest one
+// automatically (default 24 min, user-configurable via settings.autoBreakMin)
+// so the user isn't left to remember to deduct it by hand every time.
+export const AUTO_BREAK_THRESHOLD_MIN = 360; // 6h
+export const DEFAULT_AUTO_BREAK_MIN = 24;
+export function suggestedBreakMinutes(rawMinutes, settings) {
+  if (rawMinutes < AUTO_BREAK_THRESHOLD_MIN) return 0;
+  const v = settings && settings.autoBreakMin != null ? Number(settings.autoBreakMin) : DEFAULT_AUTO_BREAK_MIN;
+  return Number.isFinite(v) && v >= 0 ? v : DEFAULT_AUTO_BREAK_MIN;
 }
 
 // minutes -> "7:30" style hours label

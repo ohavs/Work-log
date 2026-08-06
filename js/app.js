@@ -13,6 +13,7 @@ import {
   MONTHS, DOW, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
   entryType, isWork, weekStartISO, weekLabel,
+  rawShiftMinutes, suggestedBreakMinutes, DEFAULT_AUTO_BREAK_MIN,
 } from './util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -49,6 +50,7 @@ let editingCatId = null;
 let noteDraft = { fields: [], checklist: [], tags: [], remind: null }; // working copy while editing
 let catPick = 'teal';             // chosen swatch in the category editor
 let formSnapshot = '';
+let breakManuallySet = false;     // entry form: true once the user picks a break chip this session — blocks the auto-break suggestion from overriding their choice
 
 const TYPE_LABEL = { work: 'עבודה', vacation: 'חופשה', sick: 'מחלה' };
 
@@ -118,7 +120,8 @@ function autoCloseActive(active) {
   try {
     const startD = new Date(active.start);
     const endD = new Date(active.start + autoCloseMs());
-    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '', autoClosed: true };
+    const breakMin = suggestedBreakMinutes(rawShiftMinutes(hhmm(startD), hhmm(endD)), store.settings);
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '', autoClosed: true };
     const created = store.addEntry(entry);
     if (!created) {
       // Daily cap already reached (2 work shifts today) — leave the active
@@ -199,7 +202,8 @@ function punch() {
       toast('המשמרת קצרה מדי ולא נשמרה · הקש “כניסה” כשמתחילים באמת');
       return;
     }
-    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin: 0, rate: '', note: '' };
+    const breakMin = suggestedBreakMinutes(rawShiftMinutes(hhmm(startD), hhmm(endD)), store.settings);
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '' };
     // Add the entry BEFORE clearing the active shift: clearing it fires a
     // synchronous change event that re-checks the daily reminder, and if the
     // entry didn't exist yet at that instant, it would look like "nothing
@@ -258,10 +262,11 @@ function jobName(id) { const j = jobsList().find((x) => x.id === id); return j ?
 function renderStats(entries) {
   let totalMin = 0, totalPay = 0;
   const workDays = new Set(), vac = new Set(), sick = new Set();
+  const sickHours = payrollOf(store.settings).sickDayHours;
   entries.forEach((e) => {
     const t = entryType(e);
     if (t === 'vacation') { vac.add(e.date); return; }
-    if (t === 'sick') { sick.add(e.date); return; }
+    if (t === 'sick') { sick.add(e.date); totalPay += sickHours * effRate(e); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
   const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
@@ -395,10 +400,11 @@ function renderMonthlyReport(entries) {
 
   let totalMin = 0, totalPay = 0;
   const workDays = new Set(), vac = new Set(), sick = new Set();
+  const sickHours = payrollOf(store.settings).sickDayHours;
   entries.forEach((e) => {
     const t = entryType(e);
     if (t === 'vacation') { vac.add(e.date); return; }
-    if (t === 'sick') { sick.add(e.date); return; }
+    if (t === 'sick') { sick.add(e.date); totalPay += sickHours * effRate(e); return; }
     const mins = workedMinutes(e); totalMin += mins; totalPay += decimalHours(mins) * effRate(e); workDays.add(e.date);
   });
   const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
@@ -608,6 +614,13 @@ function setFBreak(min) {
   $('fBreak').value = String(min);
   $('breakChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.min) === Number(min)));
 }
+// Re-suggest the break after a start/end time change, unless the user has
+// already picked a break chip themselves this session (their choice wins).
+function applyAutoBreak() {
+  if (breakManuallySet) return;
+  const raw = rawShiftMinutes($('fStart').value, $('fEnd').value);
+  setFBreak(suggestedBreakMinutes(raw, store.settings));
+}
 
 function renderJobChips(sel) {
   const jobs = jobsList();
@@ -629,6 +642,7 @@ function isDirty() { return serializeForm() !== formSnapshot; }
 
 function openEntry(id = null) {
   editingId = id;
+  breakManuallySet = false;
   const del = $('deleteEntry');
   if (id) {
     const e = store.entries.find((x) => x.id === id);
@@ -640,7 +654,8 @@ function openEntry(id = null) {
     setFormType(entryType(e)); del.hidden = false;
   } else {
     $('sheetTitle').textContent = 'רישום חדש';
-    setFDate(todayISO()); setFStart('09:00'); setFEnd('17:00'); setFBreak(0);
+    setFDate(todayISO()); setFStart('09:00'); setFEnd('17:00');
+    setFBreak(suggestedBreakMinutes(rawShiftMinutes('09:00', '17:00'), store.settings));
     $('fRate').value = ''; $('fNote').value = '';
     renderJobChips(jobFilter || '');
     setFormType('work'); del.hidden = true;
@@ -671,6 +686,8 @@ function updateCalc() {
   $('calcHours').textContent = `${fmtHours(mins)} שעות`;
   const rate = rateOf({ rate: $('fRate').value === '' ? '' : Number($('fRate').value), jobId: $('fJob').value }, store.settings);
   $('calcPay').textContent = rate ? fmtMoney(decimalHours(mins) * rate, store.settings.currency) : '';
+  const note = $('fBreakNote');
+  if (note) note.hidden = formType !== 'work' || rawShiftMinutes($('fStart').value, $('fEnd').value) < 360;
 }
 
 function submitEntry(ev) {
@@ -766,7 +783,7 @@ let settingsFormSnapshot = '';
 // reminder-time already save immediately on change, so closing the sheet never
 // loses them.
 function serializeSettingsForm() {
-  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, od: [...offDaysPick].sort() });
+  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, ab: $('sAutoBreak').value, od: [...offDaysPick].sort() });
 }
 function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
 // The "שכחתי לצאת" hours are edited with a −/+ stepper, backed by a hidden
@@ -788,6 +805,7 @@ function openSettings() {
   $('reminderTimeField').hidden = !s.reminder;
   setStepper('sShiftRemind', s.shiftRemindHours || 9);
   setStepper('sShiftMax', s.shiftMaxHours || 12);
+  setStepper('sAutoBreak', s.autoBreakMin != null ? s.autoBreakMin : DEFAULT_AUTO_BREAK_MIN);
   offDaysPick = Array.isArray(s.offDays) ? [...s.offDays] : [];
   renderOffDaysChips();
   renderPaletteRow();
@@ -942,6 +960,7 @@ function submitSettings(ev) {
     theme: $('sDark').checked ? 'dark' : 'light',
     reminder: $('sReminder').checked, reminderTime: reminderPick,
     offDays: [...offDaysPick].sort(),
+    autoBreakMin: Math.min(120, Math.max(0, Math.round(Number($('sAutoBreak').value)) || 0)),
     ...shiftHoursFromForm(),
   });
   applyTheme();
@@ -1204,7 +1223,7 @@ function renderMore() {
 let payrollFormSnapshot = '';
 let payrollTravelMode = 'none'; // 'none' | 'perDay' | 'monthly' — chosen in the travel seg control
 function serializePayrollForm() {
-  const vals = ['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pTravelDay', 'pTravelMonth']
+  const vals = ['pOvertime', 'pIncomeTax', 'pSocialHealth', 'pPensionEmp', 'pPensionEr', 'pSeverance', 'pVacDays', 'pRecDays', 'pRecRate', 'pSickHours', 'pTravelDay', 'pTravelMonth']
     .map((id) => ($(id).type === 'checkbox' ? $(id).checked : $(id).value));
   return JSON.stringify([...vals, payrollTravelMode]);
 }
@@ -1225,6 +1244,7 @@ function openPayroll() {
   $('pVacDays').value = p.annualVacationDays;
   $('pRecDays').value = p.recreationDays;
   $('pRecRate').value = p.recreationDayRate;
+  $('pSickHours').value = p.sickDayHours;
   $('pTravelDay').value = p.travelPerDay;
   $('pTravelMonth').value = p.travelMonthly;
   payrollTravelMode = p.travelMode;
@@ -1250,6 +1270,7 @@ function submitPayroll(ev) {
     annualVacationDays: num('pVacDays', 0),
     recreationDays: num('pRecDays', 0),
     recreationDayRate: num('pRecRate', 0),
+    sickDayHours: num('pSickHours', DEFAULT_PAYROLL.sickDayHours),
     travelMode: payrollTravelMode,
     travelPerDay: num('pTravelDay', 0),
     travelMonthly: num('pTravelMonth', 0),
@@ -1843,11 +1864,11 @@ function bind() {
 
   // custom picker fields
   $('fDateBtn').onclick = () => openDatePicker({ valueISO: $('fDate').value, onConfirm: (iso) => setFDate(iso) });
-  $('fStartBtn').onclick = () => openTimePicker({ title: 'שעת כניסה', value: $('fStart').value, onConfirm: (v) => { setFStart(v); updateCalc(); } });
-  $('fEndBtn').onclick = () => openTimePicker({ title: 'שעת יציאה', value: $('fEnd').value, onConfirm: (v) => { setFEnd(v); updateCalc(); } });
+  $('fStartBtn').onclick = () => openTimePicker({ title: 'שעת כניסה', value: $('fStart').value, onConfirm: (v) => { setFStart(v); applyAutoBreak(); updateCalc(); } });
+  $('fEndBtn').onclick = () => openTimePicker({ title: 'שעת יציאה', value: $('fEnd').value, onConfirm: (v) => { setFEnd(v); applyAutoBreak(); updateCalc(); } });
 
   $('fRate').addEventListener('input', updateCalc);
-  $('breakChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-min]'); if (!b) return; setFBreak(b.dataset.min); updateCalc(); });
+  $('breakChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-min]'); if (!b) return; breakManuallySet = true; setFBreak(b.dataset.min); updateCalc(); });
   $('typeSeg').addEventListener('click', (e) => { const b = e.target.closest('button[data-type]'); if (b) setFormType(b.dataset.type); });
   $('jobChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-job]'); if (b) { setJobChip(b.dataset.job); updateCalc(); } });
   $('moreToggle').onclick = () => setMore(!moreOpen);

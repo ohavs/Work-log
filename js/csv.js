@@ -1,5 +1,6 @@
 // CSV export of a month's entries. UTF‑8 BOM so Hebrew opens correctly in Excel.
 import { MONTHS, TYPE_META, entryType, workedMinutes, fmtHours, decimalHours } from './util.js';
+import { payrollOf, rateOf } from './finance.js';
 
 function esc(v) {
   const s = String(v ?? '');
@@ -7,25 +8,27 @@ function esc(v) {
 }
 
 export function exportCSV({ entries, settings, year, month }) {
-  const rate = Number(settings.rate) || 0;
+  const p = payrollOf(settings);
   const sorted = [...entries].sort(
     (a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || '')
   );
 
   const header = ['תאריך', 'סוג', 'התחלה', 'סיום', 'הפסקה (דקות)', 'שעות', 'שכר', 'הערה'];
   const rows = sorted.map((e) => {
-    const mins = workedMinutes(e);
-    const r = e.rate != null && e.rate !== '' ? Number(e.rate) : rate;
+    const t = entryType(e);
+    const isWork = t === 'work';
+    const isSick = t === 'sick';
+    const mins = isWork ? workedMinutes(e) : (isSick ? p.sickDayHours * 60 : 0);
+    const r = rateOf(e, settings);
     const pay = decimalHours(mins) * r;
-    const isWork = entryType(e) === 'work';
     return [
       e.date,
-      TYPE_META[entryType(e)].label,
+      TYPE_META[t].label,
       isWork ? e.start : '',
       isWork ? e.end : '',
       isWork ? (e.breakMin || 0) : '',
-      isWork ? fmtHours(mins) : '',
-      isWork && r ? Math.round(pay * 100) / 100 : '',
+      (isWork || isSick) ? fmtHours(mins) : '',
+      (isWork || isSick) && r ? Math.round(pay * 100) / 100 : '',
       e.note || '',
     ].map(esc).join(',');
   });

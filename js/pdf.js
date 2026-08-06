@@ -8,9 +8,10 @@
 // Falls back to the browser's native print-to-PDF only if the file
 // generation itself throws.
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
+import { payrollOf, rateOf } from './finance.js';
 
 function buildReport(el, { entries, settings, year, month }) {
-  const rate = Number(settings.rate) || 0;
+  const p = payrollOf(settings);
   const cur = settings.currency || '₪';
   const sorted = [...entries].sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''));
   let totalMin = 0, totalPay = 0;
@@ -22,11 +23,21 @@ function buildReport(el, { entries, settings, year, month }) {
     const t = entryType(e);
     const dateCell = `${d.getDate()}/${month + 1} · ${DOW[d.getDay()]}`;
     if (t !== 'work') {
-      if (t === 'vacation') vacationDays++; else sickDays++;
-      return `<tr><td>${dateCell}</td><td colspan="4">${TYPE_META[t].label}</td><td>${(e.note || '').replace(/[<>]/g, '')}</td></tr>`;
+      if (t === 'vacation') {
+        vacationDays++;
+        return `<tr><td>${dateCell}</td><td colspan="4">${TYPE_META[t].label}</td><td>${(e.note || '').replace(/[<>]/g, '')}</td></tr>`;
+      }
+      sickDays++;
+      const r = rateOf(e, settings);
+      const pay = p.sickDayHours * r;
+      totalPay += pay;
+      return `<tr>
+        <td>${dateCell}</td><td colspan="2">${TYPE_META[t].label}</td>
+        <td>${fmtHours(p.sickDayHours * 60)}</td><td>${r ? fmtMoney(pay, cur) : '—'}</td><td>${(e.note || '').replace(/[<>]/g, '')}</td>
+      </tr>`;
     }
     const mins = workedMinutes(e);
-    const r = e.rate != null && e.rate !== '' ? Number(e.rate) : rate;
+    const r = rateOf(e, settings);
     const pay = decimalHours(mins) * r;
     totalMin += mins; totalPay += pay; days.add(e.date);
     return `<tr>
@@ -38,6 +49,7 @@ function buildReport(el, { entries, settings, year, month }) {
   const offParts = [];
   if (vacationDays) offParts.push(`${vacationDays} ימי חופשה`);
   if (sickDays) offParts.push(`${sickDays} ימי מחלה`);
+  const anyRate = Number(settings.rate) > 0 || entries.some((e) => e.rate) || totalPay > 0;
 
   el.innerHTML = `
     <h1>דוח שעות עבודה</h1>
@@ -45,13 +57,13 @@ function buildReport(el, { entries, settings, year, month }) {
     <div class="pdf-cards">
       <div class="pdf-card"><b>${fmtHours(totalMin)}</b><span>סך שעות</span></div>
       <div class="pdf-card"><b>${days.size}</b><span>ימי עבודה</span></div>
-      ${rate ? `<div class="pdf-card"><b>${fmtMoney(totalPay, cur)}</b><span>שכר משוער</span></div>` : ''}
+      ${anyRate ? `<div class="pdf-card"><b>${fmtMoney(totalPay, cur)}</b><span>שכר משוער</span></div>` : ''}
       ${offParts.length ? `<div class="pdf-card"><b>${vacationDays + sickDays}</b><span>${offParts.join(' · ')}</span></div>` : ''}
     </div>
     <table>
       <thead><tr><th>תאריך</th><th>שעות</th><th>הפסקה</th><th>סה״כ</th><th>שכר</th><th>הערה</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="6" style="text-align:center;color:#8fb3ad">אין רישומים</td></tr>'}</tbody>
-      <tfoot><tr><td colspan="3">סה״כ</td><td>${fmtHours(totalMin)}</td><td>${rate ? fmtMoney(totalPay, cur) : '—'}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="3">סה״כ</td><td>${fmtHours(totalMin)}</td><td>${anyRate ? fmtMoney(totalPay, cur) : '—'}</td><td></td></tr></tfoot>
     </table>
     <p class="pdf-foot">הופק ב‑${new Date().toLocaleDateString('he-IL')} · מעקב שעות עבודה</p>`;
 
