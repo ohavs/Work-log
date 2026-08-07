@@ -9,15 +9,28 @@
 // lines directly runs the exact same code path on every device — nothing
 // to race, nothing to verify after the fact.
 //
-// jsPDF has its own built-in Unicode bidi engine (a full implementation of
-// the bidi algorithm, wired up as a "postProcessText" hook on every
-// .text() call) — it must NOT be paired with any additional manual
-// reordering of our own, and it must be told the input is logical order
-// (the order Hebrew is naturally typed/stored in a JS string) via
-// {isInputVisual:false}, since its default assumes the opposite. Passing
-// already-visual-order text, or double-reordering with a custom bidi
-// function on top of it, is what previously made digit sequences next to
-// Hebrew letters render reversed.
+// jsPDF's OWN built-in bidi engine (a postProcessText hook wired to every
+// .text() call) turned out to be unusable for our RTL text: for a pure
+// Hebrew run it just reverses the character array and draws it left to
+// right, which mispositions every glyph in a proportional font — each
+// character ends up spaced using its NEIGHBOR's width instead of its own,
+// since reversing the array swaps which glyph "owns" which advance. It's
+// invisible for monospace-ish content but reads as visibly garbled/backward
+// text once you compare it against a real RTL renderer, which is what a PDF
+// on an actual device showed. Verified against ground truth extracted from
+// Chrome's own PDF writer (page.pdf() on a dir="rtl" page, read back via
+// PyMuPDF's char-level glyph positions) — see T() below, which reimplements
+// just enough of the bidi algorithm by hand: a Hebrew run is
+// drawn character-by-character with the pen advancing LEFT by each
+// character's own width (matching how a real RTL layout engine places
+// glyphs), while a digit/Latin run is drawn normally left-to-right as one
+// string. Neutral characters (spaces, punctuation) sitting at a run
+// boundary are reassigned to whichever side is Hebrew — e.g. in "30 דק׳"
+// the space visually belongs between the digit run and the Hebrew run, not
+// stuck to the tail of the digit run — which is exactly what real bidi
+// "neutral resolution" does and what the Chrome ground truth confirmed
+// character-by-character for every mixed-content pattern this report uses
+// (dates, break-minutes, money-with-currency, free-text notes).
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
 import { payrollOf, rateOf, grossForMonth, travelForMonth } from './finance.js';
 
@@ -146,11 +159,64 @@ async function loadFonts(pdf) {
   pdf.addFont('NotoHeb-Bold.ttf', 'Heb', 'bold');
 }
 
-// Always draw Hebrew/mixed text through this — jsPDF's built-in bidi
-// engine (see file header comment) needs isInputVisual:false on every call,
-// and this is the one place that's set.
-function T(pdf, text, x, y, opts) {
-  pdf.text(text == null ? '' : String(text), x, y, { ...opts, isInputVisual: false });
+const HEB_RE = /[֐-׿יִ-ﭏ]/;
+const NEUTRAL_RE = /[^0-9A-Za-z]/; // space/punctuation — reassignable to a neighboring Hebrew run
+
+// Splits text into alternating Hebrew/other runs, then reassigns neutral
+// characters (spaces, punctuation) sitting at a run boundary to whichever
+// side is Hebrew — see file header comment for why this matters.
+function tokenizeRuns(text) {
+  const runs = [];
+  let cur = '', curHeb = null;
+  for (const ch of text) {
+    const isHeb = HEB_RE.test(ch);
+    if (curHeb === null || isHeb === curHeb) { cur += ch; curHeb = isHeb; }
+    else { runs.push({ text: cur, heb: curHeb }); cur = ch; curHeb = isHeb; }
+  }
+  if (cur) runs.push({ text: cur, heb: curHeb });
+  for (let i = 0; i < runs.length; i++) {
+    const r = runs[i];
+    if (r.heb) continue;
+    const prev = runs[i - 1];
+    const next = runs[i + 1];
+    if (prev && prev.heb) {
+      let k = 0;
+      while (k < r.text.length && NEUTRAL_RE.test(r.text[k])) k++;
+      if (k > 0) { prev.text += r.text.slice(0, k); r.text = r.text.slice(k); }
+    }
+    if (r.text && next && next.heb) {
+      let k = r.text.length;
+      while (k > 0 && NEUTRAL_RE.test(r.text[k - 1])) k--;
+      if (k < r.text.length) { next.text = r.text.slice(k) + next.text; r.text = r.text.slice(0, k); }
+    }
+  }
+  return runs.filter((r) => r.text.length > 0);
+}
+
+// Always draw Hebrew/mixed text through this — see file header comment for
+// why jsPDF's own bidi handling isn't used. `align` supports 'right'
+// (default), 'center', 'left'. `x` is the anchor for that alignment, same
+// convention as jsPDF's own text() options.
+function T(pdf, text, x, y, opts = {}) {
+  const str = text == null ? '' : String(text);
+  if (!str) return;
+  const totalW = pdf.getTextWidth(str);
+  const align = opts.align || 'right';
+  const rightX = align === 'right' ? x : align === 'center' ? x + totalW / 2 : x + totalW;
+  let cursor = rightX;
+  for (const run of tokenizeRuns(str)) {
+    if (run.heb) {
+      for (const ch of run.text) {
+        const w = pdf.getTextWidth(ch);
+        pdf.text(ch, cursor - w, y, { isInputVisual: true });
+        cursor -= w;
+      }
+    } else {
+      const w = pdf.getTextWidth(run.text);
+      pdf.text(run.text, cursor, y, { align: 'right', isInputVisual: true });
+      cursor -= w;
+    }
+  }
 }
 
 function layoutColumns(contentW) {
