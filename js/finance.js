@@ -49,20 +49,47 @@ export function splitOvertime(hours, threshold = 8) {
   return { reg, t125, t150 };
 }
 
+// The same workday-aware daily rate the weekly/monthly hour-goal tracking
+// elsewhere in the app already uses: weekly goal ÷ actual scheduled workdays
+// per week (from settings.offDays), not goal/7 — so a shortfall deduction
+// (below) lines up with the same "expected hours" the rest of the app shows.
+function dailyHourTargetOf(settings) {
+  const goalW = Number(settings.goalWeekHours) || 0;
+  if (!goalW) return 0;
+  const offDays = Array.isArray(settings.offDays) ? settings.offDays : [];
+  const workDaysPerWeek = Math.max(1, 7 - offDays.length);
+  return goalW / workDaysPerWeek;
+}
+
+// Total hours you're expected to work across calendar month (y, m), given
+// the weekly hour goal and which weekdays are marked non-work days. 0 if no
+// weekly goal is set (nothing to compare a shortfall against).
+function expectedMonthlyHours(settings, y, m) {
+  const daily = dailyHourTargetOf(settings);
+  if (!daily) return 0;
+  const offDays = Array.isArray(settings.offDays) ? settings.offDays : [];
+  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  let scheduled = 0;
+  for (let d = 1; d <= daysInMonth; d++) { if (!offDays.includes(new Date(y, m, d).getDay())) scheduled++; }
+  return daily * scheduled;
+}
+
 // Gross for a month. With overtime on, tiers are paid 125%/150%.
 // Sick days (יום מחלה) are paid days off — credited at a fixed hours/day
 // (settings.payroll.sickDayHours, default 8.4h) and taxed like regular income, but
 // excluded from the overtime split since no actual shift was worked.
 //
-// A "global" (משכורת גלובלית) employee is paid a fixed monthly salary
-// regardless of hours actually worked — gross is just that fixed amount,
-// not rate × hours. Hours (and, if overtime tracking is on, the 125%/150%
-// split) are still computed for information/awareness, but never multiplied
-// into pay, and sick days add nothing extra since the fixed salary already
-// covers them.
+// A "global" (משכורת גלובלית) employee is paid a fixed monthly salary that
+// doesn't scale UP with extra hours — but a real shortfall below the
+// expected monthly hours (weekly goal × scheduled workdays) typically DOES
+// reduce pay proportionally, at an hourly-equivalent rate derived from the
+// fixed salary itself. Vacation days count as fully "covered" (not a
+// shortfall) at that same daily rate, since they're excused, not missed.
+// With no weekly goal configured there's nothing to measure a shortfall
+// against, so the full fixed amount is paid regardless of hours.
 export function grossForMonth(entries, settings, y, m) {
   const p = payrollOf(settings);
-  let hours = 0, sickGross = 0;
+  let hours = 0, sickGross = 0, vacationDays = 0;
   const dayHours = new Map();
   const dayPayFlat = new Map();
   entries.forEach((e) => {
@@ -79,6 +106,8 @@ export function grossForMonth(entries, settings, y, m) {
       const h = Number(p.sickDayHours) || 0;
       hours += h;
       if (p.payMode !== 'global') sickGross += h * rateOf(e, settings);
+    } else if (entryType(e) === 'vacation') {
+      vacationDays++;
     }
   });
 
@@ -90,7 +119,16 @@ export function grossForMonth(entries, settings, y, m) {
     }
   }
   if (p.payMode === 'global') {
-    return { gross: Number(p.globalSalary) || 0, hours, ot125, ot150 };
+    const base = Number(p.globalSalary) || 0;
+    const expected = expectedMonthlyHours(settings, y, m);
+    const dailyTarget = dailyHourTargetOf(settings);
+    const coveredHours = hours + vacationDays * dailyTarget; // worked + sick-credited + vacation (excused, not a shortfall)
+    let gross = base;
+    if (expected > 0 && coveredHours < expected) {
+      const hourlyEquivalent = base / expected;
+      gross = Math.max(0, base - (expected - coveredHours) * hourlyEquivalent);
+    }
+    return { gross, hours, ot125, ot150 };
   }
 
   let gross = sickGross;
