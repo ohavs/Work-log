@@ -131,6 +131,25 @@ function groupRowsByPage(el, table, pageHeightPx) {
   return { intro, theadRow, rows, groups };
 }
 
+// Samples the top ~35% of a captured canvas (where the summary cards live
+// on page 1) for the brand teal used on their border/number text — a wide
+// enough color margin from black/white/gray to detect reliably. Used to
+// verify a capture actually rendered its styling instead of just hoping a
+// fixed delay was long enough on every device.
+function canvasHasBrandColor(canvas) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  const sampleH = Math.min(canvas.height, Math.round(canvas.height * 0.35));
+  if (w === 0 || sampleH === 0) return false;
+  const { data } = ctx.getImageData(0, 0, w, sampleH);
+  const step = 6 * 4; // every 6th pixel, 4 bytes (RGBA) each
+  for (let i = 0; i < data.length; i += step) {
+    const r = data[i], g = data[i + 1], b = data[i + 2];
+    if (Math.abs(r - 13) < 40 && Math.abs(g - 148) < 40 && Math.abs(b - 136) < 40) return true;
+  }
+  return false;
+}
+
 async function renderToFile(el, fileBase) {
   const jsPDF = window.jspdf && window.jspdf.jsPDF;
   const html2canvas = window.html2canvas;
@@ -187,7 +206,19 @@ async function renderToFile(el, fileBase) {
     if (tfoot) tfoot.style.display = isLast ? '' : 'none';
     if (foot) foot.style.display = isLast ? '' : 'none';
 
-    const canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    // On some devices, capturing this soon after the export sheet closes
+    // intermittently rasterizes without its background colors/borders
+    // (cards, header shading) while text still renders fine — a fixed delay
+    // long enough in testing wasn't long enough on every real device. Page 1
+    // always has the teal summary cards, so its capture is verified and
+    // retried (with a longer wait each time) instead of just hoping.
+    let canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+    if (i === 0) {
+      for (let attempt = 1; attempt < 4 && !canvasHasBrandColor(canvas); attempt++) {
+        await new Promise((r) => setTimeout(r, 500 * attempt));
+        canvas = await html2canvas(el, { scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false });
+      }
+    }
     const img = canvas.toDataURL('image/png');
     const drawH = Math.min(contentH, (canvas.height * contentW) / canvas.width);
     if (!first) pdf.addPage();

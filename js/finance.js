@@ -119,14 +119,14 @@ export function grossForMonth(entries, settings, y, m) {
     }
   }
   if (p.payMode === 'global') {
-    const base = Number(p.globalSalary) || 0;
+    const base = Number(p.globalSalary) || 0; // the cap — gross never exceeds this, no bonus for extra hours
     const expected = expectedMonthlyHours(settings, y, m);
     const dailyTarget = dailyHourTargetOf(settings);
     const coveredHours = hours + vacationDays * dailyTarget; // worked + sick-credited + vacation (excused, not a shortfall)
+    const rate = Number(settings.rate) || 0; // the actual configured hourly rate — not a derived salary/hours ratio
     let gross = base;
-    if (expected > 0 && coveredHours < expected) {
-      const hourlyEquivalent = base / expected;
-      gross = Math.max(0, base - (expected - coveredHours) * hourlyEquivalent);
+    if (expected > 0 && coveredHours < expected && rate > 0) {
+      gross = Math.max(0, base - (expected - coveredHours) * rate);
     }
     return { gross, hours, ot125, ot150 };
   }
