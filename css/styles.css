@@ -402,6 +402,7 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .sync-status { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; line-height: 1.5; }
 .sync-status[data-state="synced"] { color: var(--primary); }
 .sync-status[data-state="pending"], .sync-status[data-state="offline"] { color: var(--accent); background: var(--accent-soft); }
+.app-version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: -6px 0 0; }
 .version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: 2px 0 0; }
 
 /* ---------- action list (export) ---------- */
