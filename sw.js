@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v63';
+const CACHE = 'worklog-v64';
 const SHELL = [
   './',
   './index.html',
@@ -14,7 +14,8 @@ const SHELL = [
   './js/finance.js',
   './js/config.js',
   './js/vendor/jspdf.umd.min.js',
-  './js/vendor/html2canvas-pro.min.js',
+  './fonts/noto-sans-hebrew/pdf-hebrew-400.ttf',
+  './fonts/noto-sans-hebrew/pdf-hebrew-700.ttf',
   './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-400-normal.woff2',
   './fonts/noto-sans-hebrew/noto-sans-hebrew-latin-400-normal.woff2',
   './fonts/noto-sans-hebrew/noto-sans-hebrew-hebrew-500-normal.woff2',

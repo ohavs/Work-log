@@ -456,10 +456,10 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 /* ---------- PDF report ---------- */
-/* Kept in normal document flow (not parked off-screen at a huge negative
-   offset) so the browser actually paints it — html2canvas can silently
-   capture a blank image for content positioned far outside the viewport.
-   The zero-height, overflow-hidden wrapper keeps it invisible instead. */
+/* Only used by the print-fallback export path (native browser print-to-PDF)
+   — the primary export draws the PDF directly with jsPDF, no DOM involved.
+   Kept in normal document flow (not parked off-screen at a huge negative
+   offset) so the browser actually paints it when print fallback runs. */
 .pdf-report-wrap { position: fixed; top: 0; inset-inline-start: 0; width: 794px; height: 0; overflow: hidden; z-index: -1; pointer-events: none; }
 .pdf-report { width: 794px; background: #fff; color: #134E4A; padding: 48px 54px; direction: rtl; font-family: "Noto Sans Hebrew", sans-serif; }
 .pdf-report h1 { font-size: 30px; margin: 0 0 4px; }

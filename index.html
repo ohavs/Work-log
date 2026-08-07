@@ -16,9 +16,7 @@
   <meta name="apple-mobile-web-app-title" content="שעות עבודה" />
 
   <!-- Noto Sans Hebrew is self-hosted (see css/styles.css @font-face rules,
-       fonts/noto-sans-hebrew/) instead of loaded from Google Fonts — a
-       cross-origin font fetch was a likely cause of unreliable PDF export
-       (html2canvas has to fetch+inline every font it rasterizes text with). -->
+       fonts/noto-sans-hebrew/) instead of loaded from Google Fonts. -->
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
@@ -672,11 +670,10 @@
   <div class="pdf-report-wrap"><div id="pdfReport" class="pdf-report" aria-hidden="true"></div></div>
   <div class="toast" id="toast" hidden></div>
 
-  <!-- Local copies (no CDN) — used to render the PDF export as a real
-       downloadable file. Loaded before app.js so pdf.js can use them
-       synchronously via window.jspdf.jsPDF / window.html2canvas. -->
+  <!-- Local copy (no CDN) — jsPDF draws the PDF export natively (vector
+       text/shapes, no screenshot step). Loaded before app.js so pdf.js can
+       use it synchronously via window.jspdf.jsPDF. -->
   <script defer src="./js/vendor/jspdf.umd.min.js"></script>
-  <script defer src="./js/vendor/html2canvas-pro.min.js"></script>
   <script type="module" src="./js/app.js"></script>
 </body>
 </html>
