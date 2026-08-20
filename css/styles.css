@@ -213,8 +213,11 @@ svg { display: block; }
 .list-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; padding: 0 2px; }
 .list-head h2 { font-size: 18px; }
 .list-count { font-size: 13px; color: var(--muted-fg); }
-.list-head-btns { display: flex; gap: 8px; }
+.list-head-btns { display: flex; align-items: center; gap: 8px; }
 .select-toggle.on { background: var(--primary); color: #fff; }
+/* Compact square icon button sized to sit level with the .add-inline pills. */
+.icon-btn.sm { width: 33px; height: 33px; border-radius: 11px; }
+.icon-btn.sm svg { width: 17px; height: 17px; }
 
 .entries { display: flex; flex-direction: column; gap: 22px; }
 .day-group { display: flex; flex-direction: column; gap: 10px; }
@@ -277,6 +280,49 @@ svg { display: block; }
 .entry.sick .entry-badge { background: var(--danger-soft); color: var(--danger); }
 .entry-edit { color: var(--muted-fg); flex-shrink: 0; }
 .entry-edit svg { width: 20px; height: 20px; }
+
+/* ---------- entries: compact tile grid ---------- */
+/* A flat grid of square tiles — one per shift, with its own date on it, so
+   the day-group headers of the detailed layout aren't needed. Tapping a
+   tile expands THAT tile in place to a full-row detail card (grid-column
+   1/-1) rather than opening a separate panel below it, which would leave a
+   hole in the row it was pulled out of. */
+.entry-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.etile { position: relative; padding: 8px; background: var(--surface); border-radius: var(--radius-sm); box-shadow: var(--shadow-sm); cursor: pointer; aspect-ratio: 1; transition: transform .15s, box-shadow .15s; }
+.etile:active { transform: scale(.96); }
+.etile-face { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 100%; text-align: center; }
+.etile-date { font-size: 11.5px; font-weight: 700; color: var(--muted-fg); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.etile-hours { font-size: 21px; font-weight: 900; font-variant-numeric: tabular-nums; letter-spacing: -.03em; line-height: 1.15; }
+.etile-pay { font-size: 11.5px; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.etile-ic { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 11px; background: var(--primary-soft); color: var(--primary); }
+.etile-ic svg { width: 17px; height: 17px; }
+.etile.vac .etile-ic { background: var(--accent-soft); color: var(--accent); }
+.etile.sick .etile-ic { background: var(--danger-soft); color: var(--danger); }
+.etile-label { font-size: 12px; font-weight: 700; }
+.etile.flash { animation: flash 1.6s ease; }
+
+/* expanded tile — spans the full row and reflows its face into a header */
+.etile-detail { display: none; }
+.etile.open { grid-column: 1 / -1; aspect-ratio: auto; padding: 14px 16px; cursor: default; box-shadow: 0 0 0 2px var(--primary), var(--shadow-sm); }
+.etile.open:active { transform: none; }
+.etile.open .etile-face { flex-direction: row; align-items: baseline; justify-content: flex-start; gap: 10px; height: auto; text-align: start; flex-wrap: wrap; }
+.etile.open .etile-face .etile-pay { margin-inline-start: auto; font-size: 15px; }
+.etile.open .etile-ic { width: 28px; height: 28px; border-radius: 9px; align-self: center; }
+.etile.open .etile-detail { display: block; animation: etileIn .2s ease; }
+@keyframes etileIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.etile-rows { margin-top: 11px; padding-top: 9px; border-top: 1px solid var(--border); }
+.etile-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 4px 0; font-size: 13.5px; }
+.etile-row .k { color: var(--muted-fg); flex-shrink: 0; }
+.etile-row .v { font-weight: 700; text-align: end; font-variant-numeric: tabular-nums; }
+.etile-row .v.note { font-weight: 500; }
+.etile-actions { display: flex; gap: 8px; margin-top: 12px; }
+.etile-act { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13.5px; font-weight: 800; padding: 9px; border-radius: 11px; background: var(--primary-soft); color: var(--primary); transition: transform .15s; }
+.etile-act:active { transform: scale(.96); }
+.etile-act.danger { background: var(--danger-soft); color: var(--danger); }
+.etile-act svg { width: 16px; height: 16px; }
+.etile.selected { box-shadow: 0 0 0 2px var(--primary), var(--shadow-sm); background: var(--primary-soft); }
+.etile .sel-check { position: absolute; top: 5px; inset-inline-end: 5px; width: 20px; height: 20px; }
+.etile .sel-check svg { width: 12px; height: 12px; }
 
 .empty { text-align: center; padding: 48px 20px; color: var(--muted-fg); }
 .empty-icon { display: grid; place-items: center; margin: 0 auto 14px; width: 64px; height: 64px; border-radius: 20px; background: var(--surface-2); color: var(--muted-fg); }

@@ -6,6 +6,9 @@ export const MONTHS = [
 ];
 
 export const DOW = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+// Single-letter day names (the usual Hebrew calendar shorthand) — for the
+// compact entry tiles, where a full day name wouldn't fit.
+export const DOW_SHORT = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
 
 // Entry types
 export const TYPE_META = {

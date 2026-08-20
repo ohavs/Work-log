@@ -10,7 +10,7 @@ import {
 } from './finance.js';
 import { uid } from './util.js';
 import {
-  MONTHS, DOW, TYPE_META, parseDate, toISO, todayISO,
+  MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
   entryType, isWork, weekStartISO, weekLabel,
   rawShiftMinutes, suggestedBreakMinutes, DEFAULT_AUTO_BREAK_MIN,
@@ -20,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v65';
+const APP_VERSION = 'v66';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -43,6 +43,7 @@ let tick = null;
 let lastCreatedId = null;
 let selectMode = false;           // entries list: multi-select mode for bulk deletion
 let selectedIds = new Set();      // entry ids currently selected
+let expandedEntryId = null;       // compact tile layout: which tile is expanded (one at a time)
 let reminderPick = '18:00';       // chosen time in the settings picker
 let offDaysPick = [];             // chosen non-work weekdays (0=Sunday..6=Saturday) in the settings sheet
 let reminderNotifiedFor = '';     // ISO date we already notified for
@@ -446,10 +447,27 @@ function renderMonthlyReport(entries) {
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+function entryLayout() { return store.settings.entryLayout === 'compact' ? 'compact' : 'detailed'; }
+function toggleEntryLayout() {
+  expandedEntryId = null;
+  closeSwipe();
+  // Persisted like any other setting, so it survives a reload and follows the
+  // account across devices rather than being a per-device preference.
+  store.saveSettings({ entryLayout: entryLayout() === 'detailed' ? 'compact' : 'detailed' });
+  updateEntryLayoutToggle();
+}
+function updateEntryLayoutToggle() {
+  const btn = $('entryLayoutToggle'); if (!btn) return;
+  const compact = entryLayout() === 'compact';
+  btn.innerHTML = svg(compact ? 'rows' : 'grid'); // show the layout you'll switch TO
+  btn.setAttribute('aria-label', compact ? 'תצוגה מפורטת' : 'תצוגה קומפקטית');
+}
+
 function renderEntries(entries) {
   const wrap = $('entries'), empty = $('emptyState'); wrap.innerHTML = '';
   if (!entries.length) { empty.hidden = false; $('listCount').textContent = ''; return; }
   empty.hidden = true; $('listCount').textContent = `${entries.length} רישומים`;
+  if (entryLayout() === 'compact') { renderEntriesCompact(entries, wrap); return; }
 
   const groups = new Map();
   entries.forEach((e) => { if (!groups.has(e.date)) groups.set(e.date, []); groups.get(e.date).push(e); });
@@ -499,6 +517,96 @@ function renderEntries(entries) {
     const el = wrap.querySelector(`.entry[data-id="${lastCreatedId}"]`);
     if (el) { el.classList.add('flash'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
     lastCreatedId = null;
+  }
+}
+
+// The detail body of an expanded tile — rendered for every tile up front
+// (CSS keeps it hidden until .open) so expanding is a pure class toggle and
+// can animate, instead of re-rendering the grid on every tap.
+function tileDetail(e) {
+  const t = entryType(e);
+  const d = parseDate(e.date);
+  const rows = [];
+  const row = (k, v, cls = '') => rows.push(`<div class="etile-row"><span class="k">${k}</span><span class="v${cls ? ' ' + cls : ''}">${v}</span></div>`);
+  row('תאריך', `יום ${DOW[d.getDay()]}, ${d.getDate()} ב${MONTHS[d.getMonth()]}`);
+  if (t === 'work') {
+    row('שעות', `${e.start} – ${e.end}`);
+    if (e.breakMin) row('הפסקה', `${e.breakMin} דק׳`);
+    const mins = workedMinutes(e), r = effRate(e);
+    row('סה״כ', `${fmtHours(mins)} שעות`);
+    if (r) {
+      row('תעריף', `${fmtMoney(r, store.settings.currency)} לשעה`);
+      row('שכר', fmtMoney(decimalHours(mins) * r, store.settings.currency));
+    }
+  } else {
+    row('סוג', TYPE_LABEL[t]);
+    if (t === 'sick') {
+      const r = effRate(e), h = Number(payrollOf(store.settings).sickDayHours) || 0;
+      if (h) row('שעות מזוכות', `${fmtHours(h * 60)} שעות`);
+      if (r && h) row('שכר', fmtMoney(h * r, store.settings.currency));
+    }
+  }
+  if (e.jobId) { const jn = jobName(e.jobId); if (jn) row('מקום עבודה', escapeHtml(jn)); }
+  if (e.note) row('הערה', escapeHtml(e.note), 'note');
+  return `<div class="etile-detail">
+    <div class="etile-rows">${rows.join('')}</div>
+    <div class="etile-actions">
+      <button type="button" class="etile-act" data-eact="edit">${svg('pencil')} עריכה</button>
+      <button type="button" class="etile-act danger" data-eact="del">${svg('trash')} מחיקה</button>
+    </div>
+  </div>`;
+}
+
+// Compact layout: a flat grid of square tiles, each carrying its own date —
+// so unlike the detailed layout there are no day-group headers to repeat.
+function renderEntriesCompact(entries, wrap) {
+  const grid = document.createElement('div');
+  grid.className = 'entry-grid';
+  entries.forEach((e) => {
+    const t = entryType(e);
+    const d = parseDate(e.date);
+    const tile = document.createElement('div');
+    tile.className = `etile${t === 'work' ? '' : t === 'vacation' ? ' vac' : ' sick'}`;
+    tile.dataset.id = e.id;
+    const dateLabel = `${d.getDate()}/${d.getMonth() + 1} · ${DOW_SHORT[d.getDay()]}׳`;
+    let face;
+    if (t === 'work') {
+      const mins = workedMinutes(e), r = effRate(e);
+      face = `<span class="etile-date">${dateLabel}</span>
+        <span class="etile-hours">${fmtHours(mins)}</span>
+        ${r ? `<span class="etile-pay">${fmtMoney(decimalHours(mins) * r, store.settings.currency)}</span>` : ''}`;
+    } else {
+      face = `<span class="etile-date">${dateLabel}</span>
+        <span class="etile-ic">${svg(t)}</span>
+        <span class="etile-label">${TYPE_LABEL[t]}</span>`;
+    }
+    tile.innerHTML = `<div class="etile-face">${face}</div>${tileDetail(e)}`;
+    if (selectMode) {
+      const selected = selectedIds.has(e.id);
+      tile.classList.toggle('selected', selected);
+      tile.insertAdjacentHTML('afterbegin', `<span class="sel-check${selected ? ' on' : ''}">${selected ? svg('check') : ''}</span>`);
+    } else if (e.id === expandedEntryId) {
+      tile.classList.add('open');
+    }
+    grid.appendChild(tile);
+  });
+  wrap.appendChild(grid);
+  if (lastCreatedId) {
+    const el = grid.querySelector(`.etile[data-id="${lastCreatedId}"]`);
+    if (el) { el.classList.add('flash'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    lastCreatedId = null;
+  }
+}
+
+// Expand one tile (collapsing any other) by class toggle only — see tileDetail.
+function toggleEntryExpand(id) {
+  const grid = $('entries').querySelector('.entry-grid');
+  if (!grid) return;
+  expandedEntryId = expandedEntryId === id ? null : id;
+  grid.querySelectorAll('.etile.open').forEach((t) => { if (t.dataset.id !== expandedEntryId) t.classList.remove('open'); });
+  if (expandedEntryId) {
+    const tile = grid.querySelector(`.etile[data-id="${CSS.escape(expandedEntryId)}"]`);
+    if (tile) tile.classList.add('open');
   }
 }
 
@@ -2088,10 +2196,21 @@ function bind() {
     if (selectMode) {
       const daySel = e.target.closest('.day-sel');
       if (daySel) { toggleDaySelection(daySel.dataset.date); return; }
+      const tile = e.target.closest('.etile');
+      if (tile) { toggleEntrySelection(tile.dataset.id); return; }
       const wrap = e.target.closest('.swipe-wrap');
       if (wrap) toggleEntrySelection(wrap.dataset.id);
       return;
     }
+    // compact layout: actions inside an expanded tile, else expand/collapse it
+    const act = e.target.closest('[data-eact]');
+    if (act) {
+      const id = act.closest('.etile').dataset.id;
+      if (act.dataset.eact === 'edit') openEntry(id); else deleteEntryById(id);
+      return;
+    }
+    const tile = e.target.closest('.etile');
+    if (tile) { toggleEntryExpand(tile.dataset.id); return; }
     const delBtn = e.target.closest('.swipe-del');
     if (delBtn) { const sw = delBtn.closest('.swipe-wrap'); if (sw) deleteEntryById(sw.dataset.id); return; }
     if (Date.now() < swipeSuppressUntil) return;      // trailing click after a swipe
@@ -2100,6 +2219,7 @@ function bind() {
     const card = e.target.closest('.entry');
     if (card) openEntry(card.dataset.id);
   });
+  $('entryLayoutToggle').onclick = toggleEntryLayout;
   $('selectModeBtn').onclick = () => { selectMode ? exitSelectMode() : enterSelectMode(); };
   $('selectCancel').onclick = exitSelectMode;
   $('selectDeleteBtn').onclick = deleteSelectedEntries;
@@ -2135,9 +2255,9 @@ async function main() {
   initPickers();
   bind();
   const av = $('appVersion'); if (av) av.textContent = `גרסה ${APP_VERSION}`;
-  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
   await store.init();
-  applyTheme(); renderMonth(); renderHero(); renderJobFilter(); renderAll(); updateAccountUI();
+  applyTheme(); renderMonth(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); updateAccountUI();
   startReminderLoop();
   if ('serviceWorker' in navigator) initUpdateChecking();
 }

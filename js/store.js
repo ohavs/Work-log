@@ -55,6 +55,7 @@ export const DEFAULT_SETTINGS = {
   reminder: false,     // תזכורת יומית להזין שעות
   reminderTime: '18:00',
   noteLayout: 'detailed', // 'detailed' | 'compact'
+  entryLayout: 'detailed', // 'detailed' | 'compact' — רישומים: כרטיסים מלאים או רשת אריחים
   activeShift: null,   // { start, jobId } while clocked in — synced so the cron can watch for a forgotten clock-out
   shiftRemindHours: 9, // שכחתי-לצאת: אחרי כמה שעות פתוחות לשלוח תזכורת
   shiftMaxHours: 12,   // שכחתי-לצאת: אחרי כמה שעות לסגור אוטומטית (ולהגביל את המשמרת)
