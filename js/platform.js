@@ -171,6 +171,12 @@ export function onBackButton(handler) {
 // chooser and is far less particular, so it's the fallback rather than the
 // default — when Credential Manager works it's the better experience.
 //
+// skipNativeAuth:true means the plugin hands back the Google ID token
+// without signing into the native Firebase SDK first. That native step is
+// pure overhead here — the session that matters is the web SDK's, which the
+// caller creates from this token — and it's a step that can fail on its own,
+// taking a sign-in down that had already succeeded.
+//
 // Returns null on the web, or when the native side isn't configured yet
 // (google-services.json missing), so the caller can fall back or explain.
 export async function nativeGoogleSignIn() {
@@ -179,7 +185,7 @@ export async function nativeGoogleSignIn() {
   if (!fa) return null;
 
   const attempt = async (useCredentialManager) => {
-    const res = await fa.signInWithGoogle({ skipNativeAuth: false, useCredentialManager });
+    const res = await fa.signInWithGoogle({ skipNativeAuth: true, useCredentialManager });
     const idToken = res && res.credential && res.credential.idToken;
     if (!idToken) throw new Error('sign-in returned no ID token');
     return idToken;

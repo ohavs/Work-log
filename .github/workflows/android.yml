@@ -122,9 +122,12 @@ jobs:
           name: ${{ steps.version.outputs.name }} (build ${{ github.run_number }})
           files: ${{ steps.apk.outputs.path }}
           prerelease: ${{ steps.signing.outputs.has_key != 'true' }}
+          # Both sides of the signing line have to be non-empty: `a && '' || b`
+          # falls through to b, because the empty string is falsy — which is
+          # how a release-signed build ended up labelled debug-signed.
           body: |
             אפליקציית אנדרואיד — גרסה ${{ steps.version.outputs.name }}, build ${{ github.run_number }}
 
-            ${{ steps.signing.outputs.has_key == 'true' && '' || '⚠️ חתום במפתח debug — להתקנה ראשונה בלבד. מעבר למפתח קבוע ידרוש הסרה והתקנה מחדש.' }}
+            ${{ steps.signing.outputs.has_key == 'true' && '🔐 חתום במפתח הקבוע.' || '⚠️ חתום במפתח debug — להתקנה ראשונה בלבד. מעבר למפתח קבוע ידרוש הסרה והתקנה מחדש.' }}
 
             התקנה: להוריד את קובץ ה-APK, לפתוח אותו, ולאשר התקנה ממקור לא מוכר.
