@@ -41,6 +41,44 @@ let driver = localDriver;
 // already comes from native storage.
 export function setStorageDriver(d) { driver = d; }
 export function storageDriverName() { return driver.name; }
+export { localDriver };
+
+// Moves what's already on the device into a new driver, once.
+//
+// The first native launch after an update is the only chance to do this: the
+// user's data is sitting in the WebView's localStorage, and from here on the
+// app reads from native storage, which is empty. Miss it and the app opens
+// to a blank slate — the data isn't gone, but nothing would ever look at it
+// again.
+//
+// Only ever copies INTO an empty destination. If native storage already holds
+// something, it is by definition the newer copy (localStorage stopped being
+// written the moment the driver was swapped), and overwriting it with a
+// months-old WebView copy would be the one genuinely destructive outcome
+// here. The source is left untouched either way: a copy that costs nothing
+// to keep is worth keeping until the new one has proven itself.
+export async function migrateStorage({ from, to, keys, flagKey }) {
+  const done = await to.get(flagKey);
+  if (done) return { migrated: false, reason: 'already done', keys: [] };
+
+  const existing = [];
+  for (const k of keys) if ((await to.get(k)) != null) existing.push(k);
+  if (existing.length) {
+    // Nothing to do, but record it so this doesn't re-check on every launch.
+    await to.set(flagKey, String(Date.now()));
+    return { migrated: false, reason: 'destination not empty', keys: existing };
+  }
+
+  const copied = [];
+  for (const k of keys) {
+    const v = await from.get(k);
+    if (v == null) continue;
+    await to.set(k, v);
+    copied.push(k);
+  }
+  await to.set(flagKey, String(Date.now()));
+  return { migrated: true, reason: 'copied', keys: copied };
+}
 
 export const storage = {
   get: (key) => driver.get(key),

@@ -22,6 +22,16 @@ const LS_SETTINGS_TS = 'wl_settings_ts';
 const LS_USER = 'wl_user';
 const TOMB_TTL = 90 * 86400000; // keep delete markers 90 days
 
+// Every key the app persists, including the two app.js owns (the open shift
+// and the auto-close marker). Listed in one place because the native build
+// copies the lot out of the WebView's localStorage on its first run — a key
+// missing from this list is a key that silently doesn't survive that move.
+export const STORAGE_KEYS = [
+  LS_ENTRIES, LS_SETTINGS, LS_NOTES, LS_CATS, LS_TOMB, LS_PUSH,
+  LS_SETTINGS_TS, LS_USER,
+  'wl_active', 'wl_autoclose',
+];
+
 // --- conflict-free merge helpers (exported for tests) ---
 // Union two collections by id; for a shared id keep the newer `updated`.
 // Then drop any id whose tombstone is newer than its last edit (a real delete).

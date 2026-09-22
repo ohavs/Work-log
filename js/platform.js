@@ -72,6 +72,33 @@ export async function saveFile({ blob, filename, title }) {
   return { method: 'download' };
 }
 
+// ---- durable storage ----
+// Capacitor Preferences, which on Android is SharedPreferences: a real file
+// in the app's private data directory. That matters because the WebView's
+// localStorage — where everything lived until now — is treated by Android as
+// cache. It can be evicted when the device runs low on space, and "clear
+// cache" in system settings takes it with it. Neither touches this.
+//
+// Returns null on the web, and also if the plugin somehow isn't there, so the
+// caller keeps the localStorage driver rather than starting with no storage
+// at all.
+export function nativeStorageDriver() {
+  if (!isNative()) return null;
+  const p = plugin('Preferences');
+  if (!p) return null;
+  return {
+    name: 'native',
+    async get(key) {
+      const res = await p.get({ key });
+      // The plugin reports a missing key as value:null; keep that distinct
+      // from the empty string, which is a value someone deliberately stored.
+      return res && res.value != null ? res.value : null;
+    },
+    async set(key, value) { await p.set({ key, value }); },
+    async remove(key) { await p.remove({ key }); },
+  };
+}
+
 // ---- notifications ----
 // One shown by the app itself, right now — not a scheduled reminder. Native
 // scheduling (which is what makes reminders work with the app closed) lands

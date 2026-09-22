@@ -1,4 +1,4 @@
-import { store } from './store.js';
+import { store, STORAGE_KEYS } from './store.js';
 import { VAPID_PUBLIC_KEY } from './config.js';
 import { exportPDF } from './pdf.js';
 import { exportCSV } from './csv.js';
@@ -9,8 +9,8 @@ import {
   yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth,
 } from './finance.js';
 import { uid } from './util.js';
-import { storage } from './storage.js';
-import { saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell, setStatusBarTheme } from './platform.js';
+import { storage, setStorageDriver, migrateStorage, localDriver } from './storage.js';
+import { saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell, setStatusBarTheme, nativeStorageDriver } from './platform.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -22,7 +22,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v77';
+const APP_VERSION = 'v78';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -2426,10 +2426,33 @@ function bind() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) renderHero(); });
 }
 
+// Point every read and write at native storage, carrying across whatever the
+// WebView's localStorage already holds. Has to happen before the first read:
+// once store.init() has run, the app is showing whatever the driver in force
+// at that moment returned.
+//
+// A failure here is not fatal — it leaves the localStorage driver in place,
+// which is exactly where the app was before this existed. Losing durability
+// is worth surviving; refusing to start is not.
+async function initStorage() {
+  const native = nativeStorageDriver();
+  if (!native) return;
+  try {
+    const res = await migrateStorage({
+      from: localDriver, to: native, keys: STORAGE_KEYS, flagKey: 'wl_migrated_native',
+    });
+    if (res.migrated) console.log(`storage: moved ${res.keys.length} keys into native storage`);
+    setStorageDriver(native);
+  } catch (e) {
+    console.warn('native storage unavailable, staying on localStorage:', e);
+  }
+}
+
 async function main() {
   initIcons();
   initPickers();
   bind();
+  await initStorage();
   const av = $('appVersion'); if (av) av.textContent = `גרסה ${APP_VERSION}`;
   store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
   // Both reads must finish before the first paint: the hero renders from the
