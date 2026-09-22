@@ -263,6 +263,26 @@ export async function haptic(style = 'medium') {
   catch { return false; }
 }
 
+// ---- launcher shortcuts ----
+// A long-press on the launcher icon starts the app with a worklog:// URI.
+// Two ways in, because they're genuinely different situations: the app was
+// launched by the shortcut (getLaunchUrl), or it was already running and got
+// the intent handed to it (appUrlOpen).
+export async function launchUrl() {
+  if (!isNative()) return '';
+  const app = plugin('App');
+  if (!app || !app.getLaunchUrl) return '';
+  try { const r = await app.getLaunchUrl(); return (r && r.url) || ''; }
+  catch { return ''; }
+}
+export function onLaunchUrl(fn) {
+  if (!isNative()) return false;
+  const app = plugin('App');
+  if (!app || !app.addListener) return false;
+  app.addListener('appUrlOpen', (e) => { if (e && e.url) fn(e.url); });
+  return true;
+}
+
 // ---- lifecycle ----
 // Fires when the app stops being visible — the moment to flush pending
 // writes. The web has two events for this and neither fires reliably alone,

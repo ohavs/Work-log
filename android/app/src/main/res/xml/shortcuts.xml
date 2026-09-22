@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the launcher icon. The two things worth doing without first
+     finding your way around the app: start or end a shift, and add an entry
+     by hand.
+
+     Each one launches MainActivity with a worklog:// URI; the app reads it
+     back through the App plugin's launch URL. A build that doesn't recognise
+     the action simply opens normally, so an old install is never left with a
+     shortcut that does nothing surprising. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="punch"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_punch_short"
+        android:shortcutLongLabel="@string/shortcut_punch_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.worklog.hours"
+            android:targetClass="app.worklog.hours.MainActivity"
+            android:data="worklog://punch" />
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="add"
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutShortLabel="@string/shortcut_add_short"
+        android:shortcutLongLabel="@string/shortcut_add_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="app.worklog.hours"
+            android:targetClass="app.worklog.hours.MainActivity"
+            android:data="worklog://add" />
+    </shortcut>
+</shortcuts>

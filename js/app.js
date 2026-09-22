@@ -14,7 +14,7 @@ import { checkForUpdate, downloadAndInstall, openInstallSettings, fmtSize } from
 import {
   saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell,
   setStatusBarTheme, nativeStorageDriver, notificationPermission,
-  syncScheduledNotifications, cancelAllScheduled,
+  syncScheduledNotifications, cancelAllScheduled, launchUrl, onLaunchUrl,
 } from './platform.js';
 import { plan, idFor } from './reminders.js';
 import {
@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v81';
+const APP_VERSION = 'v82';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -2516,6 +2516,44 @@ async function initStorage() {
   }
 }
 
+// --------------------------------------------------------- launcher shortcuts
+// Long-pressing the app icon offers the two things worth doing without first
+// finding your way around: start or end a shift, and add an entry by hand.
+// The web build gets the same two from the installed PWA's manifest, which is
+// why the action is read from a query string as well as a worklog:// URI.
+export function actionFromUrl(u) {
+  if (!u) return '';
+  try {
+    const url = new URL(u, 'http://localhost/');
+    const q = url.searchParams.get('do');
+    if (q) return q;
+    if (url.protocol === 'worklog:') return url.hostname || url.pathname.replace(/[^a-z]/gi, '');
+    return '';
+  } catch { return ''; }
+}
+
+function runLaunchAction(action) {
+  if (action === 'punch') { punch(); return true; }
+  if (action === 'add') { openEntry(null); return true; }
+  // An action this build doesn't know is not an error: an older app opened by
+  // a newer shortcut should just open, not complain.
+  return false;
+}
+
+async function initLaunchActions() {
+  // The web case: ?do=… on the URL. Cleared immediately so reloading the page
+  // doesn't clock you in a second time.
+  const fromQuery = actionFromUrl(location.search);
+  if (fromQuery) {
+    try { history.replaceState(history.state, '', location.pathname); } catch {}
+    runLaunchAction(fromQuery);
+  }
+  if (!isNative()) return;
+  onLaunchUrl((url) => runLaunchAction(actionFromUrl(url)));
+  const url = await launchUrl();
+  if (url) runLaunchAction(actionFromUrl(url));
+}
+
 // ------------------------------------------------------------ in-app updates
 // Android only. On the web the service worker already updates the app on its
 // own (see initUpdateChecking), so a "download and install" button would have
@@ -2627,6 +2665,9 @@ async function main() {
   // so a network-first cache in front of them can only get in the way.
   if (!isNative() && 'serviceWorker' in navigator) initUpdateChecking();
   initNativeShell({ dark: store.settings.theme === 'dark' });
+  // After the first render and after the data is loaded: a shortcut that
+  // clocks in has to act on the real open-shift state, not an empty one.
+  initLaunchActions();
   // Storage writes are async now, so make sure a change made a moment before
   // the app is backgrounded or closed is actually on disk.
   onAppPause(() => store.flush());

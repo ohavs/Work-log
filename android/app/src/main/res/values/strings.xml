@@ -4,4 +4,11 @@
     <string name="title_activity_main">שעות עבודה</string>
     <string name="package_name">app.worklog.hours</string>
     <string name="custom_url_scheme">app.worklog.hours</string>
+
+    <!-- Launcher shortcuts (long-press the icon). Short labels are shown on
+         the icon itself and get truncated hard, so they stay to one word. -->
+    <string name="shortcut_punch_short">כניסה</string>
+    <string name="shortcut_punch_long">כניסה / יציאה ממשמרת</string>
+    <string name="shortcut_add_short">הוספה</string>
+    <string name="shortcut_add_long">הוספת רישום ידני</string>
 </resources>
