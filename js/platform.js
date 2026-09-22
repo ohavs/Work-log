@@ -164,16 +164,40 @@ export function onBackButton(handler) {
 // hands back an ID token, which the caller exchanges for an ordinary web-SDK
 // session — that keeps every Firestore call in store.js unchanged.
 //
+// Two flows, tried in order. The plugin defaults to Android's Credential
+// Manager, which is the modern one-tap path but refuses in a number of
+// ordinary device states (no account added yet, a previously dismissed
+// prompt, an older Play Services). The legacy account picker always shows a
+// chooser and is far less particular, so it's the fallback rather than the
+// default — when Credential Manager works it's the better experience.
+//
 // Returns null on the web, or when the native side isn't configured yet
 // (google-services.json missing), so the caller can fall back or explain.
 export async function nativeGoogleSignIn() {
   if (!isNative()) return null;
   const fa = plugin('FirebaseAuthentication');
   if (!fa) return null;
-  const res = await fa.signInWithGoogle({ skipNativeAuth: false });
-  const idToken = res && res.credential && res.credential.idToken;
-  if (!idToken) throw new Error('native sign-in returned no ID token');
-  return idToken;
+
+  const attempt = async (useCredentialManager) => {
+    const res = await fa.signInWithGoogle({ skipNativeAuth: false, useCredentialManager });
+    const idToken = res && res.credential && res.credential.idToken;
+    if (!idToken) throw new Error('sign-in returned no ID token');
+    return idToken;
+  };
+
+  try {
+    return await attempt(true);
+  } catch (first) {
+    console.warn('Credential Manager sign-in failed, trying the account picker:', first);
+    try {
+      return await attempt(false);
+    } catch (second) {
+      // Report the fallback's error — it's the one from the flow that shows
+      // a UI, so it describes what the user actually saw.
+      second.firstAttempt = String((first && first.message) || first);
+      throw second;
+    }
+  }
 }
 
 export async function nativeSignOut() {

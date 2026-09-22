@@ -498,6 +498,10 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .dialog-ic svg { width: 30px; height: 30px; }
 .dialog h3 { font-size: 20px; margin-bottom: 8px; }
 .dialog p { margin: 0 0 22px; color: var(--muted-fg); font-size: 15px; line-height: 1.5; }
+/* Diagnostics put a raw error in here, which is usually a long unbroken
+   string in Latin script — so keep its line breaks, let it wrap anywhere,
+   and read it left-to-right inside an otherwise RTL dialog. */
+.dialog p.raw { white-space: pre-line; overflow-wrap: anywhere; direction: ltr; text-align: left; font-size: 13px; max-height: 40vh; overflow-y: auto; }
 .dialog-actions { display: flex; gap: 12px; }
 .dialog-actions .btn { padding: 15px; }
 

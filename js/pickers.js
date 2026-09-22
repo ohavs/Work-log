@@ -101,10 +101,13 @@ function closeDate() { hideOverlay('datePicker'); }
 
 // ---------------------------------------------------------------- confirm
 let confirmResolve = null;
-export function showConfirm({ title, message, confirmText = 'אישור', cancelText = 'ביטול', danger = false, icon = 'alert' }) {
+export function showConfirm({ title, message, confirmText = 'אישור', cancelText = 'ביטול', danger = false, icon = 'alert', raw = false }) {
   const modal = $('confirmModal');
   $('confirmTitle').textContent = title || '';
   $('confirmMsg').textContent = message || '';
+  // `raw` is for diagnostics: keeps line breaks and reads the text
+  // left-to-right, since an error message isn't Hebrew prose.
+  $('confirmMsg').classList.toggle('raw', !!raw);
   $('confirmOk').textContent = confirmText;
   $('confirmCancel').textContent = cancelText;
   $('confirmOk').classList.toggle('danger', !!danger);
