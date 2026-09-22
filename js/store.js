@@ -75,21 +75,46 @@ export function settingsAreUntouched(s) {
   ));
 }
 
-// Settings sync last-write-wins on settingsTs. The catch is that every device
-// that hasn't changed a setting since that timestamp was introduced carries
-// 0 — and so does a brand-new install. The two tie, neither side yields, and
-// the new device keeps its empty defaults: no rate, no goals, no jobs, no
-// off-days. The app looks right everywhere except the reports page, which is
-// the page those settings drive.
+const isSet = (v, d) => JSON.stringify(v) !== JSON.stringify(d);
+
+// Combines two copies of the settings.
 //
-// A tie is therefore broken in favour of whichever side actually holds
-// settings. And nothing is ever adopted from a snapshot with no settings in
-// it at all, however new it claims to be — replacing real settings with
-// nothing is never the right answer.
-export function shouldAdoptRemoteSettings(local, localTs, remote, remoteTs) {
-  if (!remote) return false;
-  if (remoteTs !== localTs) return remoteTs > localTs;
-  return settingsAreUntouched(local) && !settingsAreUntouched(remote);
+// When both sides carry a real timestamp, the newer one wins outright — the
+// ordinary last-write-wins, so deliberately clearing a value on one device
+// still propagates to the other.
+//
+// When either side is undated (0 from a device that hasn't changed a setting
+// since timestamps existed, or the seeded 1), the timestamps carry no
+// information and comparing them is guesswork. The content decides instead,
+// field by field: a value somebody set beats a value nobody set. That is the
+// only reading under which an hourly rate of 55 and an hourly rate of "never
+// entered" can be told apart, and it makes the merge self-healing — whichever
+// copy still holds the real numbers wins, in either direction, no matter
+// which device happens to sync first.
+export function mergeSettings(local, localTs, remote, remoteTs) {
+  if (!remote) return { settings: { ...DEFAULT_SETTINGS, ...(local || {}) }, ts: localTs, changed: false };
+  const l = { ...DEFAULT_SETTINGS, ...(local || {}) };
+  const r = { ...DEFAULT_SETTINGS, ...remote };
+
+  const bothDated = localTs > TS_UNDATED && remoteTs > TS_UNDATED;
+  if (bothDated) {
+    const winner = remoteTs > localTs ? r : l;
+    return { settings: winner, ts: Math.max(localTs, remoteTs), changed: remoteTs > localTs };
+  }
+
+  const out = {};
+  for (const k of Object.keys(DEFAULT_SETTINGS)) {
+    const lSet = isSet(l[k], DEFAULT_SETTINGS[k]);
+    const rSet = isSet(r[k], DEFAULT_SETTINGS[k]);
+    if (lSet && rSet) out[k] = remoteTs > localTs ? r[k] : l[k];
+    else if (rSet) out[k] = r[k];
+    else out[k] = l[k];
+  }
+  return {
+    settings: out,
+    ts: Math.max(localTs, remoteTs),
+    changed: JSON.stringify(out) !== JSON.stringify(l),
+  };
 }
 
 // Settings saved before settingsTs existed have no date of their own, but
@@ -272,9 +297,15 @@ class Store {
       { const m = new Map(); [...(Array.isArray(d.pushSubs) ? d.pushSubs : []), ...this.pushSubs].forEach((s) => { if (s && s.endpoint) m.set(s.endpoint, s); }); this.pushSubs = [...m.values()]; }
       // settings: last-write-wins by timestamp
       const rts = Number(d.settingsTs) || 0;
-      if (shouldAdoptRemoteSettings(this.settings, this._settingsTs || 0, d.settings, rts)) {
-        this.settings = { ...DEFAULT_SETTINGS, ...d.settings };
-        this._settingsTs = rts;
+      if (d.settings) {
+        const m = mergeSettings(this.settings, this._settingsTs || 0, d.settings, rts);
+        this.settings = m.settings;
+        this._settingsTs = m.ts;
+        // A merge can produce something neither side had — the local rate
+        // plus the remote goals, say. Whenever the result isn't what the
+        // server already holds, it has to go back up, or the other device
+        // never sees the half that came from here.
+        if (JSON.stringify(m.settings) !== JSON.stringify({ ...DEFAULT_SETTINGS, ...d.settings })) this._dirty = true;
       }
       this._saveLocal(); // keep offline mirror of the merged state
       this._emit();
@@ -480,12 +511,13 @@ class Store {
     this.notes = mergeCollection(this.notes, data.notes, this.tombstones.n);
     this.noteCats = mergeCollection(this.noteCats, data.noteCats, this.tombstones.c);
     const bts = Number(data.settingsTs) || 0;
-    // Same tie-break as the cloud merge: a backup file taken before settings
-    // were dated still carries real settings, and restoring it onto a device
-    // that has none should bring them across.
-    if (shouldAdoptRemoteSettings(this.settings, this._settingsTs || 0, data.settings, bts)) {
-      this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
-      this._settingsTs = bts;
+    // Same rule as the cloud merge: a backup taken before settings were dated
+    // still carries real settings, and restoring it onto a device that has
+    // none should bring them across.
+    if (data.settings) {
+      const m = mergeSettings(this.settings, this._settingsTs || 0, data.settings, bts);
+      this.settings = m.settings;
+      this._settingsTs = m.ts;
     }
     this._persist();
     this._emit();
