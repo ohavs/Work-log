@@ -166,12 +166,15 @@ class Store {
 
   // ---- firebase ----
   async _initFirebase() {
-    const [{ initializeApp }, authMod, fsMod] = await Promise.all([
-      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js'),
-      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js'),
-      import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js'),
-    ]);
-    const app = initializeApp(firebaseConfig);
+    // Bundled locally (js/vendor/firebase.js) rather than pulled from
+    // gstatic at runtime. Sync needs the network anyway, but loading the SDK
+    // itself over the network doesn't help: it delays startup on a slow
+    // connection, and the Android build runs from a localhost origin where
+    // fetching third-party scripts is one more thing that can fail. The
+    // bundle is tree-shaken to just the calls below — see
+    // scripts/firebase-bundle-entry.js for how it's regenerated.
+    const { appMod, authMod, fsMod } = await import('./vendor/firebase.js');
+    const app = appMod.initializeApp(firebaseConfig);
     const auth = authMod.getAuth(app);
     const db = fsMod.getFirestore(app);
     this._fb = { auth, db, authMod, fsMod };
