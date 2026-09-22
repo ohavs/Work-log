@@ -9,6 +9,7 @@ import {
   yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth,
 } from './finance.js';
 import { uid } from './util.js';
+import { storage } from './storage.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -20,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v67';
+const APP_VERSION = 'v68';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -96,12 +97,31 @@ function toggleTheme() {
 }
 
 // ------------------------------------------------------------------ active session
-function getActive() { try { return JSON.parse(localStorage.getItem(ACTIVE_KEY) || 'null'); } catch { return null; } }
+// An open shift and the auto-close flag are mirrored in memory and written
+// through to storage, rather than read from it on every call. Reads stay
+// synchronous — they happen on every hero render and inside the auto-close
+// guard — while the durable copy goes through the same adapter as everything
+// else, so the Android build keeps it in native storage instead of a
+// WebView's localStorage. Loaded once by loadLocalUiState() before first paint.
+let activeShift = null;
+let autoCloseId = null;
+
+async function loadLocalUiState() {
+  activeShift = await storage.getJSON(ACTIVE_KEY, null);
+  autoCloseId = await storage.get(AUTOCLOSE_KEY);
+}
+
+function getActive() { return activeShift; }
 function setActive(v) {
-  v ? localStorage.setItem(ACTIVE_KEY, JSON.stringify(v)) : localStorage.removeItem(ACTIVE_KEY);
+  activeShift = v || null;
+  if (v) storage.setJSON(ACTIVE_KEY, v); else storage.remove(ACTIVE_KEY);
   // Mirror the open shift into synced settings so the reminder cron can watch
   // for a forgotten clock-out even when the app is fully closed.
   try { store.saveSettings({ activeShift: v ? { start: v.start, jobId: v.jobId || '' } : null }); } catch {}
+}
+function setAutoCloseId(id) {
+  autoCloseId = id || null;
+  if (id) storage.set(AUTOCLOSE_KEY, id); else storage.remove(AUTOCLOSE_KEY);
 }
 
 // A shift left open for 12h is capped at 12h and closed automatically; the
@@ -136,7 +156,7 @@ function autoCloseActive(active) {
       return null;
     }
     setActive(null);
-    try { localStorage.setItem(AUTOCLOSE_KEY, created.id); } catch {}
+    setAutoCloseId(created.id);
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
     showLocalNotification('המשמרת נסגרה אוטומטית', 'עברו 12 שעות — סגרנו את המשמרת. שכחת יציאה? הקש לתיקון', 'wl-autoclose');
     renderMonth(); renderAll(); renderMore(); renderHero();
@@ -150,13 +170,13 @@ function autoCloseActive(active) {
 function renderAutoCloseBanner() {
   const b = $('autoCloseBanner');
   if (!b) return;
-  const id = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })();
+  const id = autoCloseId;
   const exists = id && store.entries.some((x) => x.id === id);
-  if (!exists) { b.hidden = true; if (id) { try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} } return; }
+  if (!exists) { b.hidden = true; if (id) setAutoCloseId(null); return; }
   b.hidden = false;
 }
 function clearAutoCloseFlag(id) {
-  try { if (id && localStorage.getItem(AUTOCLOSE_KEY) === id) localStorage.removeItem(AUTOCLOSE_KEY); } catch {}
+  if (id && autoCloseId === id) setAutoCloseId(null);
 }
 function hhmm(d) { return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; }
 function longDate(d) { return `יום ${DOW[d.getDay()]} · ${d.getDate()} ב${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
@@ -466,7 +486,7 @@ function updateEntryLayoutToggle() {
 function renderEntries(entries) {
   const wrap = $('entries'), empty = $('emptyState'); wrap.innerHTML = '';
   if (!entries.length) { empty.hidden = false; $('listCount').textContent = ''; return; }
-  empty.hidden = true; $('listCount').textContent = `${entries.length} רישומים`;
+  empty.hidden = true; $('listCount').textContent = String(entries.length);
   if (entryLayout() === 'compact') { renderEntriesCompact(entries, wrap); return; }
 
   const groups = new Map();
@@ -639,8 +659,7 @@ async function deleteSelectedEntries() {
   const ok = await showConfirm({ title: `למחוק ${n} רישומים?`, message: 'לא ניתן לשחזר לאחר המחיקה.', confirmText: 'מחיקה', danger: true, icon: 'trash' });
   if (!ok) return;
   store.deleteEntries([...selectedIds]);
-  const deletedId = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })();
-  if (deletedId && selectedIds.has(deletedId)) clearAutoCloseFlag(deletedId);
+  if (autoCloseId && selectedIds.has(autoCloseId)) clearAutoCloseFlag(autoCloseId);
   toast(`${n} רישומים נמחקו`);
   exitSelectMode();
 }
@@ -2234,8 +2253,8 @@ function bind() {
   });
   $('reminderDismiss').onclick = () => { reminderDismissedFor = todayISO(); $('reminderBanner').hidden = true; };
   $('reminderBanner').addEventListener('click', (e) => { if (e.target.id !== 'reminderDismiss') openEntry(null); });
-  $('autoCloseDismiss').onclick = (e) => { e.stopPropagation(); try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} $('autoCloseBanner').hidden = true; };
-  $('autoCloseBanner').addEventListener('click', (e) => { if (e.target.id === 'autoCloseDismiss') return; const id = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })(); if (id) openEntry(id); });
+  $('autoCloseDismiss').onclick = (e) => { e.stopPropagation(); setAutoCloseId(null); $('autoCloseBanner').hidden = true; };
+  $('autoCloseBanner').addEventListener('click', (e) => { if (e.target.id === 'autoCloseDismiss') return; if (autoCloseId) openEntry(autoCloseId); });
 
   $('exportBtn').onclick = openExport;  $('closeExport').onclick = () => closeSheet($('exportSheet'));
   $('doExportPdf').onclick = runExportPdf;
@@ -2314,10 +2333,16 @@ async function main() {
   bind();
   const av = $('appVersion'); if (av) av.textContent = `גרסה ${APP_VERSION}`;
   store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
-  await store.init();
+  // Both reads must finish before the first paint: the hero renders from the
+  // open shift, and the auto-close banner from its flag.
+  await Promise.all([loadLocalUiState(), store.init()]);
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); updateAccountUI();
   startReminderLoop();
   if ('serviceWorker' in navigator) initUpdateChecking();
+  // Storage writes are async now, so make sure a change made a moment before
+  // the app is backgrounded or closed is actually on disk.
+  document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); });
+  window.addEventListener('pagehide', () => { store.flush(); });
 }
 main();
 

@@ -1,5 +1,7 @@
-// Data layer: localStorage by default, Firebase (Firestore + Google auth) when configured.
+// Data layer: device storage by default (see storage.js), Firebase (Firestore
+// + Google auth) when configured.
 import { firebaseConfig, firebaseEnabled } from './config.js';
+import { storage } from './storage.js';
 import { uid, isWork } from './util.js';
 
 // Hard safety cap: a runaway bug (or any other malfunction) must never be
@@ -14,6 +16,9 @@ const LS_SETTINGS = 'wl_settings';
 const LS_NOTES = 'wl_notes';
 const LS_CATS = 'wl_notecats';
 const LS_TOMB = 'wl_tombstones';
+const LS_PUSH = 'wl_pushsubs';
+const LS_SETTINGS_TS = 'wl_settings_ts';
+const LS_USER = 'wl_user';
 const TOMB_TTL = 90 * 86400000; // keep delete markers 90 days
 
 // --- conflict-free merge helpers (exported for tests) ---
@@ -78,6 +83,7 @@ class Store {
     this._fb = null;              // firebase handles
     this._unsub = null;           // firestore snapshot unsubscribe
     this._saveTimer = null;
+    this._writeChain = Promise.resolve(); // serialises local writes; see _saveLocal
   }
 
   onChange(fn) { this._listeners.add(fn); return () => this._listeners.delete(fn); }
@@ -85,7 +91,7 @@ class Store {
 
   // ---- lifecycle ----
   async init() {
-    this._loadLocal();
+    await this._loadLocal();
     this._emit();
     // When the network returns, flush anything still pending to the cloud.
     if (typeof window !== 'undefined') {
@@ -111,50 +117,52 @@ class Store {
   _flush() { if (this._docRef && this._dirty) this._pushCloud().then(() => this._emit()).catch(() => {}); }
 
   // ---- local storage ----
-  _loadLocal() {
-    try {
-      const e = JSON.parse(localStorage.getItem(LS_ENTRIES) || '[]');
-      if (Array.isArray(e)) this.entries = e;
-    } catch {}
-    try {
-      const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || 'null');
-      if (s) this.settings = { ...DEFAULT_SETTINGS, ...s };
-    } catch {}
-    try {
-      const n = JSON.parse(localStorage.getItem(LS_NOTES) || '[]');
-      if (Array.isArray(n)) this.notes = n;
-    } catch {}
-    try {
-      const c = JSON.parse(localStorage.getItem(LS_CATS) || '[]');
-      if (Array.isArray(c)) this.noteCats = c;
-    } catch {}
-    try {
-      const t = JSON.parse(localStorage.getItem(LS_TOMB) || 'null');
-      if (t && typeof t === 'object') this.tombstones = { e: t.e || {}, n: t.n || {}, c: t.c || {} };
-    } catch {}
-    try {
-      const ps = JSON.parse(localStorage.getItem('wl_pushsubs') || '[]');
-      if (Array.isArray(ps)) this.pushSubs = ps;
-    } catch {}
-    try {
-      const ts = Number(localStorage.getItem('wl_settings_ts')) || 0;
-      this._settingsTs = ts;
-    } catch {}
-    // Optimistically restore the signed-in account so the avatar paints
-    // immediately instead of flashing the signed-out state until Firebase auth
-    // finishes restoring asynchronously.
-    try { const u = JSON.parse(localStorage.getItem('wl_user') || 'null'); if (u && u.uid) this.user = u; } catch {}
+  async _loadLocal() {
+    const [e, s, n, c, t, ps, ts, u] = await Promise.all([
+      storage.getJSON(LS_ENTRIES, []),
+      storage.getJSON(LS_SETTINGS, null),
+      storage.getJSON(LS_NOTES, []),
+      storage.getJSON(LS_CATS, []),
+      storage.getJSON(LS_TOMB, null),
+      storage.getJSON(LS_PUSH, []),
+      storage.get(LS_SETTINGS_TS),
+      // Optimistically restore the signed-in account so the avatar paints
+      // immediately instead of flashing the signed-out state until Firebase
+      // auth finishes restoring asynchronously.
+      storage.getJSON(LS_USER, null),
+    ]);
+    if (Array.isArray(e)) this.entries = e;
+    if (s) this.settings = { ...DEFAULT_SETTINGS, ...s };
+    if (Array.isArray(n)) this.notes = n;
+    if (Array.isArray(c)) this.noteCats = c;
+    if (t && typeof t === 'object') this.tombstones = { e: t.e || {}, n: t.n || {}, c: t.c || {} };
+    if (Array.isArray(ps)) this.pushSubs = ps;
+    this._settingsTs = Number(ts) || 0;
+    if (u && u.uid) this.user = u;
   }
 
+  // Writes are chained rather than fired in parallel so two rapid mutations
+  // can't land out of order. Each save writes the whole current state, so
+  // whichever lands last is by definition the newest — and a queued save
+  // serialises at the moment it runs, not when it was queued.
   _saveLocal() {
-    localStorage.setItem(LS_ENTRIES, JSON.stringify(this.entries));
-    localStorage.setItem(LS_SETTINGS, JSON.stringify(this.settings));
-    localStorage.setItem(LS_NOTES, JSON.stringify(this.notes));
-    localStorage.setItem(LS_CATS, JSON.stringify(this.noteCats));
-    localStorage.setItem(LS_TOMB, JSON.stringify(this.tombstones));
-    localStorage.setItem('wl_pushsubs', JSON.stringify(this.pushSubs));
-    localStorage.setItem('wl_settings_ts', String(this._settingsTs || 0));
+    this._writeChain = this._writeChain
+      .then(() => Promise.all([
+        storage.setJSON(LS_ENTRIES, this.entries),
+        storage.setJSON(LS_SETTINGS, this.settings),
+        storage.setJSON(LS_NOTES, this.notes),
+        storage.setJSON(LS_CATS, this.noteCats),
+        storage.setJSON(LS_TOMB, this.tombstones),
+        storage.setJSON(LS_PUSH, this.pushSubs),
+        storage.set(LS_SETTINGS_TS, String(this._settingsTs || 0)),
+      ]))
+      .catch((err) => { console.warn('local save failed:', err); });
+    return this._writeChain;
   }
+
+  // Await every queued write — used before the app is backgrounded or closed
+  // so a mutation made a moment earlier is definitely on disk.
+  flush() { return this._writeChain; }
 
   // ---- firebase ----
   async _initFirebase() {
@@ -174,12 +182,12 @@ class Store {
     authMod.onAuthStateChanged(auth, (user) => {
       if (user) {
         this.user = { uid: user.uid, name: user.displayName || user.email || '', email: user.email || '', photo: user.photoURL || '' };
-        try { localStorage.setItem('wl_user', JSON.stringify(this.user)); } catch {}
+        storage.setJSON(LS_USER, this.user);
         this._attachCloud();
       } else {
         this.user = null;
         this.mode = 'local';
-        try { localStorage.removeItem('wl_user'); } catch {}
+        storage.remove(LS_USER);
         if (this._unsub) { this._unsub(); this._unsub = null; }
       }
       this._emit();
