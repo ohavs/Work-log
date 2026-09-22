@@ -452,6 +452,19 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .sync-status { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; line-height: 1.5; }
 .sync-status[data-state="synced"] { color: var(--primary); }
 .sync-status[data-state="pending"], .sync-status[data-state="offline"] { color: var(--accent); background: var(--accent-soft); }
+/* ---------- in-app updater ---------- */
+.update-box { display: flex; flex-direction: column; gap: 10px; }
+.update-box .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.update-box .btn svg { width: 17px; height: 17px; flex-shrink: 0; }
+.update-state { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; line-height: 1.5; margin: 0; }
+.update-state[data-state="available"] { color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.update-state[data-state="current"] { color: var(--primary); }
+.update-state[data-state="error"] { color: var(--danger); }
+/* Determinate while the download reports progress; the fill is driven from
+   JS rather than animated, so it can't run ahead of the actual bytes. */
+.update-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
+.update-bar-fill { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--primary); transition: width .2s ease; }
+
 .app-version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: -6px 0 0; }
 .version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: 2px 0 0; }
 

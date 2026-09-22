@@ -371,6 +371,20 @@
           <p class="form-note">קובץ אחד עם כל הנתונים — רישומים, פתקים, קטגוריות, מקומות עבודה והגדרות. השחזור <b>ממזג</b> עם מה שקיים במכשיר ולא מוחק כלום.</p>
         </div>
 
+        <!-- Updates without leaving the app. Shown only in the Android
+             build; on the web the browser and the service worker already do
+             this, so there'd be nothing for the button to do. -->
+        <div class="field" id="updateField" hidden>
+          <span class="field-label">עדכוני אפליקציה</span>
+          <div class="update-box">
+            <p class="update-state" id="updateState">—</p>
+            <div class="update-bar" id="updateBar" hidden><span class="update-bar-fill" id="updateBarFill"></span></div>
+            <button type="button" class="btn ghost-line" id="updateCheckBtn"><span data-ic="refresh"></span> בדיקת עדכון</button>
+            <button type="button" class="btn accent" id="updateInstallBtn" hidden><span data-ic="restore"></span> הורדה והתקנה</button>
+          </div>
+          <p class="form-note">העדכון מותקן מעל האפליקציה הקיימת ושומר על כל הנתונים. בפעם הראשונה אנדרואיד יבקש אישור חד-פעמי להתקנת עדכונים מהאפליקציה.</p>
+        </div>
+
         <!-- Lets us confirm exactly which build is actually running on a
              device, instead of guessing whether an update really landed. -->
         <p class="app-version" id="appVersion"></p>

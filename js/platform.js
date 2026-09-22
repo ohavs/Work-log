@@ -99,6 +99,53 @@ export function nativeStorageDriver() {
   };
 }
 
+// ---- in-app updates ----
+// Downloading through the native Filesystem plugin rather than fetch() is not
+// an optimisation: GitHub redirects a release asset to a storage host that
+// sends no CORS headers, so a fetch from the WebView's origin is refused
+// outright. The native side has no such rule. It also keeps a 6MB binary off
+// the JS bridge entirely, and gives real progress events.
+export async function downloadFile({ url, filename, onProgress }) {
+  const fs = plugin('Filesystem');
+  if (!fs) throw new Error('הורדה אינה זמינה במכשיר הזה');
+  let listener = null;
+  if (onProgress && fs.addListener) {
+    try {
+      listener = await fs.addListener('progress', (e) => {
+        if (e && e.contentLength) onProgress(e.bytes / e.contentLength);
+      });
+    } catch { /* progress is a nicety; the download still works without it */ }
+  }
+  try {
+    const res = await fs.downloadFile({
+      url, path: filename, directory: 'CACHE', progress: !!onProgress, recursive: true,
+    });
+    return res && res.path ? res.path : null;
+  } finally {
+    if (listener && listener.remove) { try { await listener.remove(); } catch {} }
+  }
+}
+
+// Android 8 and up gate installing packages behind a per-app system setting.
+// Asking first turns "nothing happened" into a screen the user can act on.
+export async function canInstallApk() {
+  const p = plugin('ApkInstaller');
+  if (!p) return false;
+  try { const r = await p.canInstall(); return !!(r && r.granted); }
+  catch { return false; }
+}
+export async function openInstallSettings() {
+  const p = plugin('ApkInstaller');
+  if (!p) return false;
+  try { await p.openInstallSettings(); return true; } catch { return false; }
+}
+export async function installApk(path) {
+  const p = plugin('ApkInstaller');
+  if (!p) throw new Error('התקנה אינה זמינה במכשיר הזה');
+  await p.install({ path });
+  return true;
+}
+
 // ---- notifications ----
 // One shown by the app itself, right now — not a scheduled reminder. Native
 // scheduling (which is what makes reminders work with the app closed) lands
