@@ -39,6 +39,22 @@ jobs:
           node scripts/build-web.mjs
           npx cap sync android
 
+      # The auth plugin only builds a provider's handler if that provider is
+      # listed in the config, and it reports the omission at sign-in time as a
+      # runtime failure on the device — which costs a full build-install-retry
+      # round trip to discover. Cheaper to fail here.
+      - name: Check the sign-in provider is configured
+        run: |
+          node -e "
+            const c = require('./android/app/src/main/assets/capacitor.config.json');
+            const p = ((c.plugins || {}).FirebaseAuthentication || {}).providers || [];
+            if (!p.includes('google.com')) {
+              console.error('capacitor.config.json does not list google.com under FirebaseAuthentication.providers — Google sign-in would fail on the device.');
+              process.exit(1);
+            }
+            console.log('Sign-in providers:', p.join(', '));
+          "
+
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
