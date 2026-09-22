@@ -3,7 +3,7 @@ import { VAPID_PUBLIC_KEY } from './config.js';
 import { exportPDF } from './pdf.js';
 import { exportCSV } from './csv.js';
 import { initIcons, svg } from './icons.js';
-import { initPickers, openTimePicker, openDatePicker, showConfirm } from './pickers.js';
+import { initPickers, openTimePicker, openDatePicker, showConfirm, dismissTopOverlay, isOverlayOpen, setOverlayChangeHandler } from './pickers.js';
 import {
   DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
   yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth,
@@ -21,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v69';
+const APP_VERSION = 'v70';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -45,6 +45,7 @@ let lastCreatedId = null;
 let selectMode = false;           // entries list: multi-select mode for bulk deletion
 let selectedIds = new Set();      // entry ids currently selected
 let expandedEntryId = null;       // compact tile layout: which tile is expanded (one at a time)
+let currentView = 'viewHome';     // for the back stack: back returns here before leaving
 let reminderPick = '18:00';       // chosen time in the settings picker
 let offDaysPick = [];             // chosen non-work weekdays (0=Sunday..6=Saturday) in the settings sheet
 let reminderNotifiedFor = '';     // ISO date we already notified for
@@ -641,8 +642,8 @@ function updateSelectBar() {
   $('selectModeBtn').classList.toggle('on', selectMode);
   $('addBtn').hidden = selectMode;
 }
-function enterSelectMode() { selectMode = true; selectedIds.clear(); renderAll(); updateSelectBar(); }
-function exitSelectMode() { selectMode = false; selectedIds.clear(); closeSwipe(); renderAll(); updateSelectBar(); }
+function enterSelectMode() { selectMode = true; selectedIds.clear(); renderAll(); updateSelectBar(); syncBack(); }
+function exitSelectMode() { selectMode = false; selectedIds.clear(); closeSwipe(); renderAll(); updateSelectBar(); syncBack(); }
 function toggleEntrySelection(id) {
   if (selectedIds.has(id)) selectedIds.delete(id); else selectedIds.add(id);
   renderAll(); updateSelectBar();
@@ -665,8 +666,89 @@ async function deleteSelectedEntries() {
 }
 
 // ------------------------------------------------------------------ sheets
-function openSheet(s) { s.hidden = false; }
-function closeSheet(s) { s.hidden = true; }
+// ------------------------------------------------------------------ sheets & back stack
+// Which sheets need an unsaved-changes prompt before closing, and how each
+// one closes. Declared here rather than inside bind() so the backdrop tap,
+// the drag-to-dismiss gesture and the back gesture all consult the same
+// table — a sheet with unsaved changes then prompts identically however you
+// try to leave it. (Function declarations hoist, so referring to handlers
+// defined further down is fine.)
+const SHEET_GUARDS = {
+  entrySheet: { isDirty, tryClose: tryCloseEntry },
+  settingsSheet: { isDirty: isSettingsDirty, tryClose: tryCloseSettings },
+  payrollSheet: { isDirty: isPayrollDirty, tryClose: tryClosePayroll },
+  jobSheet: { isDirty: isJobDirty, tryClose: tryCloseJob },
+  noteSheet: { isDirty: isNoteDirty, tryClose: tryCloseNote },
+  catSheet: { isDirty: isCatDirty, tryClose: tryCloseCat },
+};
+// Read-only / action sheets: nothing can be lost, so they close directly.
+const DIRECT_CLOSE_SHEETS = ['exportSheet', 'noteViewSheet', 'catManageSheet', 'vacQuickSheet'];
+
+// Open sheets form a back stack so a back gesture closes the top one instead
+// of leaving the app — the difference between a web page and an app, and the
+// most jarring thing about a WebView that doesn't handle it. Rather than
+// mapping each layer to its own history entry and unwinding them, we keep ONE
+// sentinel entry in place while anything is open: a back press consumes it,
+// we close one layer, and re-arm if more remain. Nothing open and not on Home
+// goes Home first; from Home, back leaves as usual.
+const backStack = [];
+let backArmed = false;
+let suppressPop = false; // set while we consume our own sentinel, see disarmBack
+
+// Everything handleBack() can act on, so the sentinel is armed exactly when a
+// back press has something to do — and absent when it doesn't, which is what
+// makes back leave the app on the first press from Home.
+function needsBack() {
+  return backStack.length > 0 || isOverlayOpen() || selectMode || currentView !== 'viewHome';
+}
+function armBack() {
+  if (backArmed) return;
+  try { history.pushState({ wl: 1 }, ''); backArmed = true; } catch {}
+}
+// Give the sentinel back when the last layer closes through its own button,
+// so a later back press leaves the app on the first press rather than being
+// swallowed by a stale entry.
+function disarmBack() {
+  if (!backArmed) return;
+  backArmed = false;
+  suppressPop = true;
+  try { history.back(); } catch { suppressPop = false; }
+}
+function syncBack() { if (needsBack()) armBack(); else disarmBack(); }
+function pushLayer(id) { if (id && !backStack.includes(id)) backStack.push(id); syncBack(); }
+function popLayer(id) { const i = backStack.lastIndexOf(id); if (i >= 0) backStack.splice(i, 1); syncBack(); }
+
+function openSheet(s) { s.hidden = false; pushLayer(s.id); }
+function closeSheet(s) { s.hidden = true; popLayer(s.id); }
+
+// One back press. Returns false only when the app should actually exit.
+function handleBack() {
+  if (dismissTopOverlay()) return true;          // picker / confirm dialog first
+  const id = backStack[backStack.length - 1];
+  if (id) {
+    const g = SHEET_GUARDS[id];
+    // A guarded close may prompt and leave the sheet open — that's fine, the
+    // sentinel is re-armed either way, so the next back press asks again.
+    if (g) g.tryClose(); else if ($(id)) closeSheet($(id));
+    return true;
+  }
+  if (selectMode) { exitSelectMode(); return true; }
+  if (currentView !== 'viewHome') { switchView('viewHome'); return true; }
+  return false;
+}
+
+function initBackHandling() {
+  setOverlayChangeHandler(syncBack); // pickers/dialogs aren't in the stack; they still arm it
+  window.addEventListener('popstate', () => {
+    if (suppressPop) { suppressPop = false; return; } // our own disarm, not a user press
+    backArmed = false;           // the entry we pushed was just consumed
+    // If nothing was open the sentinel was never armed, so this is a real
+    // navigation that has already happened — nothing to allow or prevent.
+    // Re-arm only if a layer is still showing; re-arming when the last one
+    // just closed would swallow the next back press.
+    if (handleBack() && needsBack()) armBack();
+  });
+}
 
 // ------------------------------------------------------------------ drag-to-dismiss
 // Touch-drag a bottom sheet downward to close it. Activates only on a downward
@@ -1993,6 +2075,8 @@ async function copyText(text) {
 }
 
 function switchView(id) {
+  currentView = id;
+  syncBack(); // leaving Home arms back; returning disarms it
   ['viewHome', 'viewReports', 'viewMore', 'viewNotes'].forEach((v) => { $(v).hidden = v !== id; });
   document.querySelectorAll('.nav-item').forEach((b) => b.classList.toggle('on', b.dataset.view === id));
   if (id === 'viewMore') renderMore();
@@ -2308,15 +2392,6 @@ function bind() {
   // backdrop taps: editor sheets with deferred fields use the unsaved-changes
   // guard; read-only / action sheets (export, note view, category list) close
   // directly since they hold nothing that can be lost.
-  const SHEET_GUARDS = {
-    entrySheet: { isDirty, tryClose: tryCloseEntry },
-    settingsSheet: { isDirty: isSettingsDirty, tryClose: tryCloseSettings },
-    payrollSheet: { isDirty: isPayrollDirty, tryClose: tryClosePayroll },
-    jobSheet: { isDirty: isJobDirty, tryClose: tryCloseJob },
-    noteSheet: { isDirty: isNoteDirty, tryClose: tryCloseNote },
-    catSheet: { isDirty: isCatDirty, tryClose: tryCloseCat },
-  };
-  const DIRECT_CLOSE_SHEETS = ['exportSheet', 'noteViewSheet', 'catManageSheet', 'vacQuickSheet'];
   Object.entries(SHEET_GUARDS).forEach(([id, g]) => $(id).addEventListener('click', (e) => { if (e.target.id === id) g.tryClose(); }));
   DIRECT_CLOSE_SHEETS.forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
 
@@ -2338,6 +2413,7 @@ async function main() {
   await Promise.all([loadLocalUiState(), store.init()]);
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); updateAccountUI();
   startReminderLoop();
+  initBackHandling();
   if ('serviceWorker' in navigator) initUpdateChecking();
   // Storage writes are async now, so make sure a change made a moment before
   // the app is backgrounded or closed is actually on disk.

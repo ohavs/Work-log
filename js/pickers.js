@@ -7,6 +7,17 @@ const $ = (id) => document.getElementById(id);
 const ITEM_H = 44; // must match CSS .wheel-item height
 const pad2 = (n) => String(n).padStart(2, '0');
 
+// Pickers and the confirm dialog sit above the sheets and are opened straight
+// from here, so app.js's back stack can't see them. These three helpers are
+// the only way they're shown or hidden, and each one notifies app.js so a
+// back gesture can dismiss whichever is on top. See setOverlayChangeHandler.
+const OVERLAYS = ['timePicker', 'datePicker', 'confirmModal'];
+let onOverlayChange = () => {};
+export function setOverlayChangeHandler(fn) { onOverlayChange = fn || (() => {}); }
+export function isOverlayOpen() { return OVERLAYS.some((id) => $(id) && !$(id).hidden); }
+function showOverlay(id) { $(id).hidden = false; onOverlayChange(); }
+function hideOverlay(id) { $(id).hidden = true; onOverlayChange(); }
+
 // ---------------------------------------------------------------- time wheel
 let timeState = { onConfirm: null };
 
@@ -38,7 +49,7 @@ export function openTimePicker({ title, value, onConfirm }) {
   const [h, m] = (value || '09:00').split(':').map(Number);
   timeState.onConfirm = onConfirm;
 
-  sheet.hidden = false;
+  showOverlay('timePicker');
   requestAnimationFrame(() => {
     setIndex(wh, h || 0); setIndex(wm, m || 0);
     markActive(wh, 23); markActive(wm, 59);
@@ -48,7 +59,7 @@ export function openTimePicker({ title, value, onConfirm }) {
   wh.onscroll = onScrollH; wm.onscroll = onScrollM;
 }
 
-function closeTime() { $('timePicker').hidden = true; }
+function closeTime() { hideOverlay('timePicker'); }
 
 // ---------------------------------------------------------------- calendar
 let dateState = { y: 0, m: 0, selISO: null, onConfirm: null };
@@ -78,7 +89,7 @@ export function openDatePicker({ valueISO, onConfirm, title }) {
   const d = valueISO ? parseDate(valueISO) : new Date();
   dateState = { y: d.getFullYear(), m: d.getMonth(), selISO: valueISO || toISO(new Date()), onConfirm };
   renderCal();
-  $('datePicker').hidden = false;
+  showOverlay('datePicker');
 }
 function shiftCal(delta) {
   dateState.m += delta;
@@ -86,7 +97,7 @@ function shiftCal(delta) {
   if (dateState.m > 11) { dateState.m = 0; dateState.y++; }
   renderCal();
 }
-function closeDate() { $('datePicker').hidden = true; }
+function closeDate() { hideOverlay('datePicker'); }
 
 // ---------------------------------------------------------------- confirm
 let confirmResolve = null;
@@ -99,12 +110,25 @@ export function showConfirm({ title, message, confirmText = 'אישור', cancel
   $('confirmOk').classList.toggle('danger', !!danger);
   $('confirmIcon').className = 'dialog-ic' + (danger ? ' danger' : '');
   $('confirmIcon').innerHTML = svg(icon);
-  modal.hidden = false;
+  showOverlay('confirmModal');
   return new Promise((resolve) => { confirmResolve = resolve; });
 }
 function resolveConfirm(v) {
-  $('confirmModal').hidden = true;
+  hideOverlay('confirmModal');
   if (confirmResolve) { confirmResolve(v); confirmResolve = null; }
+}
+
+// Dismisses whichever picker or dialog is currently showing, treating a back
+// gesture as "cancel" — the confirm dialog resolves false, and a picker
+// closes without applying its value (only its confirm button applies one).
+// Returns false when nothing was open, so the caller can fall through to
+// whatever back should mean next. These sit above the sheet stack in app.js
+// rather than inside it, since they're always the topmost layer when open.
+export function dismissTopOverlay() {
+  if (!$('confirmModal').hidden) { resolveConfirm(false); return true; }
+  if (!$('datePicker').hidden) { closeDate(); return true; }
+  if (!$('timePicker').hidden) { closeTime(); return true; }
+  return false;
 }
 
 // ---------------------------------------------------------------- wiring
