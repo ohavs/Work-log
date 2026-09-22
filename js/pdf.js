@@ -33,6 +33,7 @@
 // (dates, break-minutes, money-with-currency, free-text notes).
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
 import { payrollOf, rateOf, grossForMonth, travelForMonth } from './finance.js';
+import { saveFile } from './platform.js';
 
 const FONT_REGULAR_URL = './fonts/noto-sans-hebrew/pdf-hebrew-400.ttf';
 const FONT_BOLD_URL = './fonts/noto-sans-hebrew/pdf-hebrew-700.ttf';
@@ -426,7 +427,9 @@ async function renderToFile(data) {
     }
   });
 
-  pdf.save(`${data.fileBase}.pdf`);
+  // Hand the finished document to the platform rather than letting jsPDF
+  // trigger its own download — on Android that's a share sheet instead.
+  await saveFile({ blob: pdf.output('blob'), filename: `${data.fileBase}.pdf`, title: data.title });
 }
 
 // Print fallback keeps using the old hidden-HTML + browser-native print

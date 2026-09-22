@@ -1,6 +1,7 @@
 // CSV export of a month's entries. UTF‑8 BOM so Hebrew opens correctly in Excel.
 import { MONTHS, TYPE_META, entryType, workedMinutes, fmtHours, decimalHours } from './util.js';
 import { payrollOf, rateOf } from './finance.js';
+import { saveFile } from './platform.js';
 
 function esc(v) {
   const s = String(v ?? '');
@@ -35,12 +36,5 @@ export function exportCSV({ entries, settings, year, month }) {
 
   const csv = '﻿' + [header.map(esc).join(','), ...rows].join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `שעות-עבודה-${MONTHS[month]}-${year}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return saveFile({ blob, filename: `שעות-עבודה-${MONTHS[month]}-${year}.csv`, title: 'דוח שעות עבודה' });
 }

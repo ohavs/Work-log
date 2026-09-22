@@ -10,6 +10,7 @@ import {
 } from './finance.js';
 import { uid } from './util.js';
 import { storage } from './storage.js';
+import { saveFile, notify, haptic, onAppPause } from './platform.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -21,7 +22,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v70';
+const APP_VERSION = 'v71';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -246,10 +247,13 @@ function punch() {
     lastCreatedId = created.id;
     viewYear = startD.getFullYear(); viewMonth = startD.getMonth();
     setActive(null);
+    haptic('medium'); // clocking in and out should feel physical on a phone
     renderMonth(); renderHero();
     toast(`נשמר · ${fmtHours(workedMinutes(entry))} שעות · הקש על הרישום לעריכה`);
   } else {
-    setActive({ start: Date.now(), jobId: jobFilter || '' }); renderHero();
+    setActive({ start: Date.now(), jobId: jobFilter || '' });
+    haptic('medium');
+    renderHero();
   }
 }
 
@@ -1201,17 +1205,8 @@ function reminderDue() {
 }
 // Notifications in an installed PWA must be shown by the service worker —
 // `new Notification()` fails silently on mobile (and always on iOS).
-async function showLocalNotification(title, body, tag = 'wl-daily') {
-  if (!('Notification' in window) || Notification.permission !== 'granted') return false;
-  const opts = { body, tag, renotify: true, icon: './icons/icon-192.png', badge: './icons/icon-192.png', dir: 'rtl', lang: 'he' };
-  try {
-    if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
-      const reg = await navigator.serviceWorker.ready;
-      await reg.showNotification(title, opts);
-      return true;
-    }
-  } catch (_) { /* fall through to the legacy API */ }
-  try { new Notification(title, opts); return true; } catch (_) { return false; }
+function showLocalNotification(title, body, tag = 'wl-daily') {
+  return notify({ title, body, tag });
 }
 function refreshReminder() {
   const banner = $('reminderBanner');
@@ -1319,13 +1314,7 @@ function runExportCsv() { closeSheet($('exportSheet')); try { exportCSV({ entrie
 // that stores its data somewhere else.
 function downloadJson(obj, filename) {
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return saveFile({ blob, filename, title: 'גיבוי שעות עבודה' });
 }
 
 function runBackupExport() {
@@ -2417,8 +2406,7 @@ async function main() {
   if ('serviceWorker' in navigator) initUpdateChecking();
   // Storage writes are async now, so make sure a change made a moment before
   // the app is backgrounded or closed is actually on disk.
-  document.addEventListener('visibilitychange', () => { if (document.hidden) store.flush(); });
-  window.addEventListener('pagehide', () => { store.flush(); });
+  onAppPause(() => store.flush());
 }
 main();
 
