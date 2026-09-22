@@ -22,7 +22,11 @@ const OUT = join(ROOT, 'www');
 const EXCLUDE = new Set([
   'www', 'android', 'ios', 'node_modules', '.git', '.github', '.claude',
   'scripts', 'cloudflare', 'design-system',
-  'firebase.json', 'firestore.rules', 'README.md', 'package.json',
+  // Source images the launcher icons and splash screens are generated FROM.
+  // The generated resources live in android/app/src/main/res; shipping the
+  // 2732px originals inside the APK would add megabytes for nothing.
+  'assets',
+  'firebase.json', 'firestore.rules', 'package.json',
   'package-lock.json', 'capacitor.config.json', '.gitignore',
 ]);
 
@@ -38,6 +42,7 @@ await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 for (const name of await readdir(ROOT)) {
   if (EXCLUDE.has(name) || EXCLUDE_NATIVE.has(name) || name.startsWith('.')) continue;
+  if (name.endsWith('.md')) continue; // docs are for the repo, not the app
   await cp(join(ROOT, name), join(OUT, name), { recursive: true });
   out.push(name);
 }
