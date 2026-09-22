@@ -2,6 +2,7 @@
 // + Google auth) when configured.
 import { firebaseConfig, firebaseEnabled } from './config.js';
 import { storage } from './storage.js';
+import { isNative, nativeGoogleSignIn, nativeSignOut } from './platform.js';
 import { uid, isWork } from './util.js';
 
 // Hard safety cap: a runaway bug (or any other malfunction) must never be
@@ -270,6 +271,20 @@ class Store {
   async signIn() {
     if (!this._fb) return;
     const { auth, authMod } = this._fb;
+
+    // In the Android shell the browser's popup/redirect flow can't work — the
+    // WebView's origin is localhost, which Firebase won't redirect back to.
+    // Sign in through Play Services instead and exchange the ID token it
+    // returns for a normal web-SDK session, so everything below this line
+    // (onAuthStateChanged, the Firestore listener, the merge) is untouched.
+    if (isNative()) {
+      const idToken = await nativeGoogleSignIn();
+      if (!idToken) throw new Error('native sign-in unavailable');
+      const cred = authMod.GoogleAuthProvider.credential(idToken);
+      await authMod.signInWithCredential(auth, cred);
+      return;
+    }
+
     const provider = new authMod.GoogleAuthProvider();
     // Popups are unreliable inside installed PWAs / some mobile browsers —
     // fall back to a full-page redirect when a popup can't be used.
@@ -287,6 +302,9 @@ class Store {
 
   async signOut() {
     if (!this._fb) return;
+    // Both sides: the native session would otherwise silently sign the user
+    // straight back in on the next attempt.
+    await nativeSignOut();
     await this._fb.authMod.signOut(this._fb.auth);
   }
 

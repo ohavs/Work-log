@@ -3,13 +3,13 @@
 // The app has no build step — this is the one exception, run by hand when the
 // Firebase SDK needs updating, with the bundled output committed to the repo.
 //
-//   npm install firebase@10.12.2 esbuild
+//   npm install firebase@^12.6.0 esbuild
 //   npx esbuild scripts/firebase-bundle-entry.js --bundle --format=esm \
 //       --minify --target=es2020 --legal-comments=none \
 //       --outfile=js/vendor/firebase.js
 //
 // Only the calls store.js actually makes are imported, so esbuild can drop
-// the rest — that's the difference between ~650KB of CDN bundles and ~320KB.
+// everything else — without that the bundle is roughly twice the size.
 // signInWithCredential is included ahead of the Android build, where native
 // Google Sign-In hands back a credential to exchange for a web-SDK session.
 import { initializeApp } from 'firebase/app';

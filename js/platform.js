@@ -157,6 +157,32 @@ export function onBackButton(handler) {
   return true;
 }
 
+// ---- authentication ----
+// The browser's redirect sign-in can't work inside the shell: the WebView's
+// origin is localhost, not the site's domain, so Firebase won't accept the
+// redirect back. Android instead signs in through Google Play Services and
+// hands back an ID token, which the caller exchanges for an ordinary web-SDK
+// session — that keeps every Firestore call in store.js unchanged.
+//
+// Returns null on the web, or when the native side isn't configured yet
+// (google-services.json missing), so the caller can fall back or explain.
+export async function nativeGoogleSignIn() {
+  if (!isNative()) return null;
+  const fa = plugin('FirebaseAuthentication');
+  if (!fa) return null;
+  const res = await fa.signInWithGoogle({ skipNativeAuth: false });
+  const idToken = res && res.credential && res.credential.idToken;
+  if (!idToken) throw new Error('native sign-in returned no ID token');
+  return idToken;
+}
+
+export async function nativeSignOut() {
+  if (!isNative()) return false;
+  const fa = plugin('FirebaseAuthentication');
+  if (!fa) return false;
+  try { await fa.signOut(); return true; } catch { return false; }
+}
+
 // ---- native shell startup ----
 // Called once the first render is on screen. The splash is configured not to
 // auto-hide (launchAutoHide:false) so it stays up until there's something

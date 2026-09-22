@@ -11,6 +11,7 @@
     "apk:release": "npm run sync && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
+    "@capacitor-firebase/authentication": "^8.5.2",
     "@capacitor/android": "^8.5.2",
     "@capacitor/app": "^8.1.1",
     "@capacitor/cli": "^8.5.2",
@@ -21,7 +22,8 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/share": "^8.0.2",
     "@capacitor/splash-screen": "^8.0.2",
-    "@capacitor/status-bar": "^8.0.3"
+    "@capacitor/status-bar": "^8.0.3",
+    "firebase": "^12.19.0"
   },
   "devDependencies": {
     "playwright": "^1.63.0"

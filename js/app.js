@@ -22,7 +22,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v72';
+const APP_VERSION = 'v73';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1295,9 +1295,26 @@ async function enableReminderFlow() {
 
 async function handleAuth() {
   try {
-    if (store.user) { await store.signOut(); toast('התנתקת'); }
-    else { sessionStorage.setItem('wl_signin_pending', '1'); await store.signIn(); }
-  } catch (e) { sessionStorage.removeItem('wl_signin_pending'); toast('ההתחברות נכשלה'); console.warn(e); }
+    if (store.user) { await store.signOut(); toast('התנתקת'); return; }
+    // The pending flag exists to survive the browser's sign-in redirect.
+    // Android signs in without leaving the app, so it would only ever be
+    // stale there.
+    if (!isNative()) sessionStorage.setItem('wl_signin_pending', '1');
+    await store.signIn();
+    if (isNative() && store.user) toast('מחובר · מסנכרן…');
+  } catch (e) {
+    sessionStorage.removeItem('wl_signin_pending');
+    console.warn(e);
+    // Tell the two failure modes apart: on Android the usual cause is that
+    // the app isn't registered with Firebase yet, which no amount of
+    // retrying will fix.
+    const msg = String((e && e.message) || e);
+    if (isNative() && /unavailable|not configured|no ID token|FirebaseApp/i.test(msg)) {
+      toast('ההתחברות לא מוגדרת עדיין באפליקציה · אפשר לשחזר מגיבוי בינתיים');
+    } else {
+      toast('ההתחברות נכשלה');
+    }
+  }
 }
 
 // ------------------------------------------------------------------ export
