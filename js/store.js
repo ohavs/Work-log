@@ -49,6 +49,45 @@ export function mergeTombstones(a = {}, b = {}) {
   return out;
 }
 
+// Purely per-device display preferences. A device whose only change is a
+// dark-mode tap still holds nothing worth keeping, so these don't count
+// towards "this device has real settings" — otherwise a fresh install that
+// got its theme switched before signing in would look like it had settings
+// of its own and refuse to take the ones from the cloud.
+const PRESENTATION_KEYS = new Set(['theme', 'palette', 'noteLayout', 'entryLayout']);
+
+// True when these settings are the ones a fresh install starts with — the
+// hourly rate, the goals, the jobs, the off-days and the rest all untouched.
+export function settingsAreUntouched(s) {
+  const v = { ...DEFAULT_SETTINGS, ...(s || {}) };
+  return Object.keys(DEFAULT_SETTINGS).every((k) => (
+    PRESENTATION_KEYS.has(k) || JSON.stringify(v[k]) === JSON.stringify(DEFAULT_SETTINGS[k])
+  ));
+}
+
+// Settings sync last-write-wins on settingsTs. The catch is that every device
+// that hasn't changed a setting since that timestamp was introduced carries
+// 0 — and so does a brand-new install. The two tie, neither side yields, and
+// the new device keeps its empty defaults: no rate, no goals, no jobs, no
+// off-days. The app looks right everywhere except the reports page, which is
+// the page those settings drive.
+//
+// A tie is therefore broken in favour of whichever side actually holds
+// settings. And nothing is ever adopted from a snapshot with no settings in
+// it at all, however new it claims to be — replacing real settings with
+// nothing is never the right answer.
+export function shouldAdoptRemoteSettings(local, localTs, remote, remoteTs) {
+  if (!remote) return false;
+  if (remoteTs !== localTs) return remoteTs > localTs;
+  return settingsAreUntouched(local) && !settingsAreUntouched(remote);
+}
+
+// Settings saved before settingsTs existed have no date of their own, but
+// they're still real. They get the lowest timestamp that outranks a fresh
+// install's untouched defaults — enough to reach other devices, not enough to
+// outrank any genuine edit made since.
+const TS_UNDATED = 1;
+
 export const DEFAULT_SETTINGS = {
   name: '',
   rate: 0,
@@ -139,6 +178,7 @@ class Store {
     if (t && typeof t === 'object') this.tombstones = { e: t.e || {}, n: t.n || {}, c: t.c || {} };
     if (Array.isArray(ps)) this.pushSubs = ps;
     this._settingsTs = Number(ts) || 0;
+    if (!this._settingsTs && s && !settingsAreUntouched(this.settings)) this._settingsTs = TS_UNDATED;
     if (u && u.uid) this.user = u;
   }
 
@@ -222,7 +262,10 @@ class Store {
       { const m = new Map(); [...(Array.isArray(d.pushSubs) ? d.pushSubs : []), ...this.pushSubs].forEach((s) => { if (s && s.endpoint) m.set(s.endpoint, s); }); this.pushSubs = [...m.values()]; }
       // settings: last-write-wins by timestamp
       const rts = Number(d.settingsTs) || 0;
-      if (rts > (this._settingsTs || 0)) { this.settings = { ...DEFAULT_SETTINGS, ...(d.settings || {}) }; this._settingsTs = rts; }
+      if (shouldAdoptRemoteSettings(this.settings, this._settingsTs || 0, d.settings, rts)) {
+        this.settings = { ...DEFAULT_SETTINGS, ...d.settings };
+        this._settingsTs = rts;
+      }
       this._saveLocal(); // keep offline mirror of the merged state
       this._emit();
       // Push the reconciled state up if we hold anything the server doesn't —
@@ -427,7 +470,10 @@ class Store {
     this.notes = mergeCollection(this.notes, data.notes, this.tombstones.n);
     this.noteCats = mergeCollection(this.noteCats, data.noteCats, this.tombstones.c);
     const bts = Number(data.settingsTs) || 0;
-    if (data.settings && bts > (this._settingsTs || 0)) {
+    // Same tie-break as the cloud merge: a backup file taken before settings
+    // were dated still carries real settings, and restoring it onto a device
+    // that has none should bring them across.
+    if (shouldAdoptRemoteSettings(this.settings, this._settingsTs || 0, data.settings, bts)) {
       this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
       this._settingsTs = bts;
     }
