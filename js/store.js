@@ -363,6 +363,54 @@ class Store {
     this._emit();
   }
 
+  // ---- backup file ----
+  // Everything the app stores, in one plain-JSON object.
+  exportBackup() {
+    return {
+      app: 'work-log',
+      format: 1,
+      exportedAt: new Date().toISOString(),
+      entries: this.entries,
+      settings: this.settings,
+      settingsTs: this._settingsTs || 0,
+      notes: this.notes,
+      noteCats: this.noteCats,
+      tombstones: this.tombstones,
+    };
+  }
+
+  // Restore MERGES rather than replaces, through the exact same conflict-free
+  // rules as cloud sync: union by id, newest `updated` wins a shared id, and a
+  // delete only sticks when its tombstone is newer than the record's last edit.
+  // So importing an old backup can never destroy newer data already on the
+  // device — worst case it adds back records that were deleted since, which is
+  // what someone restoring a backup is asking for anyway. Settings follow the
+  // same last-write-wins timestamp rule the cloud uses.
+  importBackup(data) {
+    const before = { entries: this.entries.length, notes: this.notes.length, noteCats: this.noteCats.length };
+    const rt = data.tombstones || {};
+    this.tombstones = {
+      e: mergeTombstones(this.tombstones.e, rt.e),
+      n: mergeTombstones(this.tombstones.n, rt.n),
+      c: mergeTombstones(this.tombstones.c, rt.c),
+    };
+    this.entries = mergeCollection(this.entries, data.entries, this.tombstones.e);
+    this.notes = mergeCollection(this.notes, data.notes, this.tombstones.n);
+    this.noteCats = mergeCollection(this.noteCats, data.noteCats, this.tombstones.c);
+    const bts = Number(data.settingsTs) || 0;
+    if (data.settings && bts > (this._settingsTs || 0)) {
+      this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
+      this._settingsTs = bts;
+    }
+    this._persist();
+    this._emit();
+    return {
+      entries: this.entries.length - before.entries,
+      notes: this.notes.length - before.notes,
+      noteCats: this.noteCats.length - before.noteCats,
+    };
+  }
+
   // ---- web-push subscriptions (for background reminders) ----
   addPushSub(sub) {
     if (!sub || !sub.endpoint) return;

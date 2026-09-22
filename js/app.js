@@ -20,7 +20,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v66';
+const APP_VERSION = 'v67';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1211,6 +1211,57 @@ async function runExportPdf() {
 }
 function runExportCsv() { closeSheet($('exportSheet')); try { exportCSV({ entries: monthEntries(), settings: store.settings, year: viewYear, month: viewMonth }); toast('קובץ ה‑CSV הורד'); } catch (e) { console.error(e); toast('שגיאה בייצוא ה‑CSV'); } }
 
+// ------------------------------------------------------------------ full backup file
+// A complete, human-readable snapshot of everything the app stores. Cloud sync
+// already protects signed-in users, but a file you hold yourself also covers
+// the cases sync can't: a wrong account, a bad restore, or moving to a build
+// that stores its data somewhere else.
+function downloadJson(obj, filename) {
+  const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function runBackupExport() {
+  try {
+    const data = store.exportBackup();
+    const d = new Date();
+    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    downloadJson(data, `work-log-backup-${stamp}.json`);
+    toast(data.entries.length === 1 ? 'הגיבוי הורד · רישום אחד' : `הגיבוי הורד · ${data.entries.length} רישומים`);
+  } catch (e) { console.error(e); toast('שגיאה בייצוא הגיבוי'); }
+}
+
+async function runBackupImport(file) {
+  let data;
+  try { data = JSON.parse(await file.text()); }
+  catch { toast('הקובץ אינו קובץ JSON תקין'); return; }
+  if (!data || data.app !== 'work-log' || !Array.isArray(data.entries)) { toast('זה לא קובץ גיבוי של האפליקציה'); return; }
+  const when = data.exportedAt ? new Date(data.exportedAt).toLocaleDateString('he-IL') : 'לא ידוע';
+  const ok = await showConfirm({
+    title: 'לשחזר מהגיבוי?',
+    message: `הגיבוי מ‑${when} מכיל ${data.entries.length} רישומים ו‑${(data.notes || []).length} פתקים. הוא ימוזג עם הנתונים הקיימים — שום דבר לא יימחק.`,
+    confirmText: 'שחזור',
+    icon: 'shield',
+  });
+  if (!ok) return;
+  try {
+    const added = store.importBackup(data);
+    // Hebrew needs a real singular, not "1 רישומים".
+    const plural = (n, one, many) => (n === 1 ? one : `${n} ${many}`);
+    const parts = [];
+    if (added.entries) parts.push(plural(added.entries, 'רישום אחד', 'רישומים'));
+    if (added.notes) parts.push(plural(added.notes, 'פתק אחד', 'פתקים'));
+    if (added.noteCats) parts.push(plural(added.noteCats, 'קטגוריה אחת', 'קטגוריות'));
+    toast(parts.length ? `שוחזרו ${parts.join(' · ')}` : 'הגיבוי מוזג — הכול כבר היה קיים');
+  } catch (e) { console.error(e); toast('שגיאה בשחזור הגיבוי'); }
+}
+
 // ------------------------------------------------------------------ toast
 let toastTimer = null;
 function toast(msg) {
@@ -2186,10 +2237,17 @@ function bind() {
   $('autoCloseDismiss').onclick = (e) => { e.stopPropagation(); try { localStorage.removeItem(AUTOCLOSE_KEY); } catch {} $('autoCloseBanner').hidden = true; };
   $('autoCloseBanner').addEventListener('click', (e) => { if (e.target.id === 'autoCloseDismiss') return; const id = (() => { try { return localStorage.getItem(AUTOCLOSE_KEY); } catch { return null; } })(); if (id) openEntry(id); });
 
-  $('exportBtn').onclick = openExport;
-  $('closeExport').onclick = () => closeSheet($('exportSheet'));
+  $('exportBtn').onclick = openExport;  $('closeExport').onclick = () => closeSheet($('exportSheet'));
   $('doExportPdf').onclick = runExportPdf;
   $('doExportCsv').onclick = runExportCsv;
+
+  $('backupExport').onclick = runBackupExport;
+  $('backupImport').onclick = () => $('backupFile').click();
+  $('backupFile').onchange = (e) => {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = ''; // let the same file be picked again after a failed import
+    if (f) runBackupImport(f);
+  };
 
   const entriesEl = $('entries');
   entriesEl.addEventListener('click', (e) => {

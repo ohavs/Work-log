@@ -445,6 +445,10 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .btn.ghost-line { background: transparent; border: 2px solid var(--border); color: var(--fg); }
 
 .sync-box { display: flex; flex-direction: column; gap: 10px; }
+/* Two equal-width actions side by side — neither is the "main" one. */
+.backup-row { display: flex; gap: 8px; }
+.backup-row .btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding-inline: 10px; }
+.backup-row .btn svg { width: 17px; height: 17px; flex-shrink: 0; }
 .sync-status { font-size: 13px; color: var(--muted-fg); background: var(--surface-2); border-radius: 12px; padding: 12px 14px; text-align: center; line-height: 1.5; }
 .sync-status[data-state="synced"] { color: var(--primary); }
 .sync-status[data-state="pending"], .sync-status[data-state="offline"] { color: var(--accent); background: var(--accent-soft); }

@@ -361,6 +361,16 @@
           <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
         </div>
 
+        <div class="field">
+          <span class="field-label">גיבוי נתונים <em>(קובץ)</em></span>
+          <div class="backup-row">
+            <button type="button" class="btn ghost-line" id="backupExport"><span data-ic="export"></span> ייצוא גיבוי</button>
+            <button type="button" class="btn ghost-line" id="backupImport"><span data-ic="restore"></span> שחזור מקובץ</button>
+          </div>
+          <input type="file" id="backupFile" accept="application/json,.json" hidden />
+          <p class="form-note">קובץ אחד עם כל הנתונים — רישומים, פתקים, קטגוריות, מקומות עבודה והגדרות. השחזור <b>ממזג</b> עם מה שקיים במכשיר ולא מוחק כלום.</p>
+        </div>
+
         <!-- Lets us confirm exactly which build is actually running on a
              device, instead of guessing whether an update really landed. -->
         <p class="app-version" id="appVersion"></p>
