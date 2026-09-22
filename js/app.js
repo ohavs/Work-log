@@ -11,7 +11,12 @@ import {
 import { uid } from './util.js';
 import { storage, setStorageDriver, migrateStorage, localDriver } from './storage.js';
 import { checkForUpdate, downloadAndInstall, openInstallSettings, fmtSize } from './update.js';
-import { saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell, setStatusBarTheme, nativeStorageDriver } from './platform.js';
+import {
+  saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell,
+  setStatusBarTheme, nativeStorageDriver, notificationPermission,
+  syncScheduledNotifications, cancelAllScheduled,
+} from './platform.js';
+import { plan, idFor } from './reminders.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -23,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v80';
+const APP_VERSION = 'v81';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1229,15 +1234,51 @@ function startReminderLoop() {
   refreshReminder();
   setInterval(refreshReminder, 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReminder(); });
+  if (isNative()) {
+    // Nothing needs to be running for these to arrive, so there's no loop to
+    // keep and no push subscription to maintain.
+    rescheduleNative();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) rescheduleNative(); });
+    return;
+  }
   // keep this device's push subscription fresh & stored whenever reminders are on
   if (store.settings.reminder && 'Notification' in window && Notification.permission === 'granted') subscribePush();
 }
-// Returns 'granted' | 'denied' | 'default' | 'unsupported'.
+
+// ---- native scheduling ----
+// The schedule is a function of the settings, the entries, the notes and the
+// open shift, so it's rebuilt whenever any of those change. Debounced because
+// store.onChange fires on every keystroke in a form, and rebuilding means
+// cancelling and re-arming every pending alarm.
+let rescheduleTimer = null;
+let lastPlanKey = '';
+function rescheduleNative({ immediate = false } = {}) {
+  if (!isNative()) return;
+  clearTimeout(rescheduleTimer);
+  rescheduleTimer = setTimeout(async () => {
+    try {
+      const items = plan({
+        settings: store.settings,
+        entries: store.entries,
+        notes: store.notes,
+        activeShift: getActive(),
+        now: Date.now(),
+      });
+      // Re-arming an identical schedule would cancel and recreate every alarm
+      // for nothing — and a rebuild in the second a reminder is due could
+      // cancel it just before it fires.
+      const key = items.map((i) => `${i.id}@${i.at}`).join('|');
+      if (key === lastPlanKey) return;
+      lastPlanKey = key;
+      await syncScheduledNotifications(items);
+    } catch (e) { console.warn('reschedule failed:', e); }
+  }, immediate ? 0 : 1200);
+}
+// Returns 'granted' | 'denied' | 'default' | 'unsupported'. Asks the right
+// system for it — Android 13+ has its own notification permission, which the
+// WebView's Notification API knows nothing about.
 async function requestNotifyPermission() {
-  if (!('Notification' in window)) return 'unsupported';
-  let perm = Notification.permission;
-  if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch (_) {} }
-  return perm;
+  return notificationPermission();
 }
 // ---- web push: subscribe this device so reminders arrive when the app is closed ----
 function urlB64ToUint8Array(base64) {
@@ -1274,6 +1315,19 @@ async function unsubscribePush() {
 async function sendTestReminder() {
   const perm = await requestNotifyPermission();
   if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
+  if (isNative()) {
+    // Nothing to register and no server run to wait for — the system holds
+    // the alarm, so this can just be scheduled a few seconds out and watched
+    // with the app closed.
+    const at = Date.now() + 12000;
+    await syncScheduledNotifications([
+      ...plan({ settings: store.settings, entries: store.entries, notes: store.notes, activeShift: getActive(), now: Date.now() }),
+      { id: idFor('test-' + at), key: 'test', at, title: 'בדיקת התראה ✓', body: 'ההתראות עובדות — גם כשהאפליקציה סגורה' },
+    ]);
+    lastPlanKey = ''; // the test isn't part of the plan, so force the next rebuild
+    toast('סגור את האפליקציה — ההתראה תגיע בעוד כ-12 שניות');
+    return;
+  }
   const ok = await subscribePush();
   if (!ok) { toast('לא ניתן לרשום את המכשיר להתראות'); return; }
   store.saveSettings({ pushTestAt: Date.now() });
@@ -1281,7 +1335,13 @@ async function sendTestReminder() {
 }
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
-  if (perm === 'granted') {
+  if (perm === 'granted' && isNative()) {
+    // No push subscription and no server: the reminders are alarms the system
+    // already holds, so they arrive with the app closed and no network.
+    rescheduleNative({ immediate: true });
+    await showLocalNotification('התזכורות פעילות ✓', 'התזכורות יגיעו גם כשהאפליקציה סגורה', 'wl-test');
+    toast('התזכורות הופעלו — שלחנו התראת בדיקה');
+  } else if (perm === 'granted') {
     const pushed = await subscribePush(); // background delivery when app is closed
     const shown = await showLocalNotification('התזכורות פעילות ✓', pushed ? 'נשלח לך תזכורת יומית גם כשהאפליקציה סגורה' : 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
     toast(shown ? 'התזכורות הופעלו — שלחנו התראת בדיקה' : 'התזכורת הופעלה');
@@ -2327,7 +2387,14 @@ function bind() {
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
   $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
-  $('sReminder').addEventListener('change', () => { const on = $('sReminder').checked; $('reminderTimeField').hidden = !on; if (on) enableReminderFlow(); else unsubscribePush(); });
+  $('sReminder').addEventListener('change', () => {
+    const on = $('sReminder').checked;
+    $('reminderTimeField').hidden = !on;
+    if (on) { enableReminderFlow(); return; }
+    // Turning them off has to take back what the system is already holding;
+    // an alarm doesn't consult the app before firing.
+    if (isNative()) cancelAllScheduled().then(() => { lastPlanKey = ''; }); else unsubscribePush();
+  });
   // כפתור בדיקת התראה מוסתר מה-UI (הקוד נשמר); מקשרים רק אם הוא קיים.
   { const b = $('testReminderBtn'); if (b) b.onclick = sendTestReminder; }
   // Saves immediately on confirm (like the theme/reminder toggles beside it) —
@@ -2549,7 +2616,7 @@ async function main() {
   await initStorage();
   const av = $('appVersion'); if (av) av.textContent = `גרסה ${APP_VERSION}`;
   initUpdater();
-  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); });
+  store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); rescheduleNative(); });
   // Both reads must finish before the first paint: the hero renders from the
   // open shift, and the auto-close banner from its flag.
   await Promise.all([loadLocalUiState(), store.init()]);

@@ -186,6 +186,71 @@ function hashCode(s) {
   return h;
 }
 
+// ---- scheduled reminders (native) ----
+// Android wakes the app at a time agreed in advance, so these arrive with the
+// app closed and the phone offline — no tab open, no server, no push.
+export async function notificationPermission() {
+  if (isNative()) {
+    const ln = plugin('LocalNotifications');
+    if (!ln) return 'unsupported';
+    try {
+      let s = await ln.checkPermissions();
+      if (!s || s.display === 'prompt' || s.display === 'prompt-with-rationale') s = await ln.requestPermissions();
+      return s && s.display === 'granted' ? 'granted' : (s && s.display === 'denied' ? 'denied' : 'default');
+    } catch { return 'default'; }
+  }
+  if (!('Notification' in window)) return 'unsupported';
+  let perm = Notification.permission;
+  if (perm === 'default') { try { perm = await Notification.requestPermission(); } catch {} }
+  return perm;
+}
+
+// Replaces the whole pending schedule with `items`.
+//
+// Everything pending is cancelled first rather than diffed. The app is the
+// only thing scheduling notifications here, so "what's pending" and "what the
+// app wants" should be the same set — and rebuilding is one call against a
+// list we already have, where diffing would be a second source of truth about
+// what's on the device, able to drift from the first.
+export async function syncScheduledNotifications(items) {
+  if (!isNative()) return { scheduled: 0, cancelled: 0, reason: 'web' };
+  const ln = plugin('LocalNotifications');
+  if (!ln) return { scheduled: 0, cancelled: 0, reason: 'unsupported' };
+
+  let cancelled = 0;
+  try {
+    const pending = await ln.getPending();
+    const list = (pending && pending.notifications) || [];
+    if (list.length) {
+      await ln.cancel({ notifications: list.map((n) => ({ id: n.id })) });
+      cancelled = list.length;
+    }
+  } catch (e) { console.warn('could not read pending notifications:', e); }
+
+  if (!items.length) return { scheduled: 0, cancelled };
+  try {
+    await ln.schedule({
+      notifications: items.map((n) => ({
+        id: n.id,
+        title: n.title,
+        body: n.body,
+        smallIcon: 'ic_stat_icon',
+        // allowWhileIdle gets the alarm through Doze, which is exactly the
+        // state a phone is in at the times these fire.
+        schedule: { at: new Date(n.at), allowWhileIdle: true },
+      })),
+    });
+    return { scheduled: items.length, cancelled };
+  } catch (e) {
+    console.warn('could not schedule notifications:', e);
+    return { scheduled: 0, cancelled, error: String((e && e.message) || e) };
+  }
+}
+
+export async function cancelAllScheduled() {
+  return syncScheduledNotifications([]);
+}
+
 // ---- haptics ----
 // Deliberately silent on the web: the Vibration API is ignored or outright
 // removed in most desktop and iOS browsers, and buzzing a laptop isn't the
