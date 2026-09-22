@@ -140,3 +140,52 @@ export function onAppPause(fn) {
   document.addEventListener('visibilitychange', () => { if (document.hidden) fn(); });
   window.addEventListener('pagehide', fn);
 }
+
+// Android's hardware/gesture back button, which the shell delivers as its own
+// event rather than as a history navigation. The handler returns false when
+// nothing is left to close, and the app exits — which is what a back press at
+// the root of an app should do. Returns false on the web so the caller knows
+// to fall back to history-based handling.
+export function onBackButton(handler) {
+  if (!isNative()) return false;
+  const app = plugin('App');
+  if (!app || !app.addListener) return false;
+  app.addListener('backButton', () => {
+    try { if (!handler()) app.exitApp(); }
+    catch (e) { console.warn('back handler:', e); }
+  });
+  return true;
+}
+
+// ---- native shell startup ----
+// Called once the first render is on screen. The splash is configured not to
+// auto-hide (launchAutoHide:false) so it stays up until there's something
+// real behind it — otherwise the app flashes an empty screen while the
+// entries load. Everything here is a no-op on the web.
+export async function initNativeShell({ dark }) {
+  if (!isNative()) return;
+  document.documentElement.classList.add('native');
+  try {
+    const sb = plugin('StatusBar');
+    if (sb) {
+      // Style is the CONTENT colour, so a light app bar needs dark icons.
+      await sb.setStyle({ style: dark ? 'DARK' : 'LIGHT' });
+      await sb.setBackgroundColor({ color: dark ? '#0f1a1d' : '#F0FDFA' });
+    }
+  } catch (e) { console.warn('status bar:', e); }
+  try {
+    const splash = plugin('SplashScreen');
+    if (splash) await splash.hide();
+  } catch (e) { console.warn('splash hide:', e); }
+}
+
+// Keeps the system bars in step with the in-app theme toggle.
+export async function setStatusBarTheme(dark) {
+  if (!isNative()) return;
+  try {
+    const sb = plugin('StatusBar');
+    if (!sb) return;
+    await sb.setStyle({ style: dark ? 'DARK' : 'LIGHT' });
+    await sb.setBackgroundColor({ color: dark ? '#0f1a1d' : '#F0FDFA' });
+  } catch {}
+}

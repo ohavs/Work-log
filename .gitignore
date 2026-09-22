@@ -1,12 +1,25 @@
 node_modules/
-package.json
 package-lock.json
-# but DO track the Cloudflare Worker's manifest — Workers Builds needs it to deploy
-!cloudflare/package.json
 *.log
 .DS_Store
 screenshot*.png
 .firebase/
+
+# Capacitor: the web assets are copied here by scripts/build-web.mjs before a
+# native build. Generated, never edited — the sources live at the repo root.
+www/
+
+# Android build output and local-only SDK paths. The android/ project itself
+# IS tracked, so native config (manifest, styles, icons) is reviewable and the
+# CI build is reproducible.
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
+android/capacitor-cordova-android-plugins/
+*.keystore
+*.jks
 
 # python cache
 __pycache__/

@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">שעות עבודה</string>
+    <string name="title_activity_main">שעות עבודה</string>
+    <string name="package_name">app.worklog.hours</string>
+    <string name="custom_url_scheme">app.worklog.hours</string>
+</resources>

@@ -1,0 +1,126 @@
+name: Build Android APK
+
+# Every push to the working branch produces an installable APK, published as a
+# GitHub Release so the first install is a direct download from the repo.
+# Later updates come from inside the app itself (see the in-app updater), not
+# from here — this is the bootstrap.
+on:
+  push:
+    branches:
+      - main
+      - claude/hebrew-work-tracker-pwa-m0mv4q
+    paths-ignore:
+      - 'README.md'
+      - 'design-system/**'
+      - 'cloudflare/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write   # needed to publish the release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Copy web assets and sync the native project
+        run: |
+          node scripts/build-web.mjs
+          npx cap sync android
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # Every build needs a versionCode higher than the last, or Android
+      # refuses to install it over the existing app. The run number gives a
+      # monotonic one for free; versionName carries the app's own version
+      # string so what's in Settings matches what's installed.
+      - name: Stamp the version
+        id: version
+        run: |
+          APP_VERSION=$(grep -oP "APP_VERSION = '\\Kv[0-9]+" js/app.js)
+          echo "name=$APP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          sed -i "s/versionCode 1/versionCode ${{ github.run_number }}/" android/app/build.gradle
+          sed -i "s/versionName \"1.0\"/versionName \"$APP_VERSION\"/" android/app/build.gradle
+          echo "Building $APP_VERSION (code ${{ github.run_number }})"
+
+      # A release key is only used once it exists. Until then the build is
+      # debug-signed, which installs fine and is enough to check the app
+      # itself — but a debug-signed APK and a release-signed one can't replace
+      # each other in place, so the switch needs one uninstall.
+      - name: Check for a signing key
+        id: signing
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret — building a debug-signed APK."
+          fi
+
+      - name: Decode the signing key
+        if: steps.signing.outputs.has_key == 'true'
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/release.jks
+
+      - name: Build release APK
+        if: steps.signing.outputs.has_key == 'true'
+        working-directory: android
+        env:
+          WL_KEYSTORE_FILE: release.jks
+          WL_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          WL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          WL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Build debug APK
+        if: steps.signing.outputs.has_key != 'true'
+        working-directory: android
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Name the artifact
+        id: apk
+        run: |
+          if [ "${{ steps.signing.outputs.has_key }}" = "true" ]; then
+            SRC=android/app/build/outputs/apk/release/app-release.apk
+          else
+            SRC=android/app/build/outputs/apk/debug/app-debug.apk
+          fi
+          OUT="work-log-${{ steps.version.outputs.name }}.apk"
+          cp "$SRC" "$OUT"
+          echo "path=$OUT" >> "$GITHUB_OUTPUT"
+          ls -la "$OUT"
+
+      - name: Upload as a build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: work-log-apk
+          path: ${{ steps.apk.outputs.path }}
+          retention-days: 30
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ steps.version.outputs.name }}-${{ github.run_number }}
+          name: ${{ steps.version.outputs.name }} (build ${{ github.run_number }})
+          files: ${{ steps.apk.outputs.path }}
+          prerelease: ${{ steps.signing.outputs.has_key != 'true' }}
+          body: |
+            אפליקציית אנדרואיד — גרסה ${{ steps.version.outputs.name }}, build ${{ github.run_number }}
+
+            ${{ steps.signing.outputs.has_key == 'true' && '' || '⚠️ חתום במפתח debug — להתקנה ראשונה בלבד. מעבר למפתח קבוע ידרוש הסרה והתקנה מחדש.' }}
+
+            התקנה: להוריד את קובץ ה-APK, לפתוח אותו, ולאשר התקנה ממקור לא מוכר.

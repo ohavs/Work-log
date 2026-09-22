@@ -10,7 +10,7 @@ import {
 } from './finance.js';
 import { uid } from './util.js';
 import { storage } from './storage.js';
-import { saveFile, notify, haptic, onAppPause } from './platform.js';
+import { saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell, setStatusBarTheme } from './platform.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -22,7 +22,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v71';
+const APP_VERSION = 'v72';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -88,6 +88,7 @@ function applyTheme() {
   const meta = document.querySelector('meta[name="theme-color"]');
   const p = PALETTES[store.settings.palette] || PALETTES.teal;
   if (meta) meta.content = dark ? '#0f1620' : p[0];
+  setStatusBarTheme(dark); // keep the Android system bars in step; no-op on web
   const tt = $('themeToggle');
   if (tt) { tt.innerHTML = svg(dark ? 'sun' : 'moon'); tt.setAttribute('aria-label', dark ? 'מעבר למצב בהיר' : 'מעבר למצב כהה'); }
 }
@@ -718,7 +719,9 @@ function disarmBack() {
   suppressPop = true;
   try { history.back(); } catch { suppressPop = false; }
 }
-function syncBack() { if (needsBack()) armBack(); else disarmBack(); }
+// The history sentinel is a browser mechanism; on Android the shell
+// delivers a real back event, so none of this applies there.
+function syncBack() { if (isNative()) return; if (needsBack()) armBack(); else disarmBack(); }
 function pushLayer(id) { if (id && !backStack.includes(id)) backStack.push(id); syncBack(); }
 function popLayer(id) { const i = backStack.lastIndexOf(id); if (i >= 0) backStack.splice(i, 1); syncBack(); }
 
@@ -743,6 +746,8 @@ function handleBack() {
 
 function initBackHandling() {
   setOverlayChangeHandler(syncBack); // pickers/dialogs aren't in the stack; they still arm it
+  // Android hands us the back press directly — no history juggling needed.
+  if (onBackButton(handleBack)) return;
   window.addEventListener('popstate', () => {
     if (suppressPop) { suppressPop = false; return; } // our own disarm, not a user press
     backArmed = false;           // the entry we pushed was just consumed
@@ -2403,7 +2408,10 @@ async function main() {
   applyTheme(); renderMonth(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); updateAccountUI();
   startReminderLoop();
   initBackHandling();
-  if ('serviceWorker' in navigator) initUpdateChecking();
+  // No service worker in the native shell — the assets ship inside the APK,
+  // so a network-first cache in front of them can only get in the way.
+  if (!isNative() && 'serviceWorker' in navigator) initUpdateChecking();
+  initNativeShell({ dark: store.settings.theme === 'dark' });
   // Storage writes are async now, so make sure a change made a moment before
   // the app is backgrounded or closed is actually on disk.
   onAppPause(() => store.flush());
