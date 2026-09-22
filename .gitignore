@@ -1,5 +1,6 @@
 node_modules/
-package-lock.json
+# package-lock.json IS tracked: `npm ci` in the Android build needs it, and
+# it's what makes the APK build reproducible.
 *.log
 .DS_Store
 screenshot*.png
