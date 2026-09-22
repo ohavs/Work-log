@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "116225436709",
+    "project_id": "work-ccd39",
+    "storage_bucket": "work-ccd39.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:116225436709:android:cff227e76c307ae287e3cc",
+        "android_client_info": {
+          "package_name": "app.worklog.hours"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "116225436709-5ketgdn0vfv65omgnd4jnvudf45vmfuq.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCaDPmNAnEDuJUgYO6tt86scdYBo_2BEq8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "116225436709-5ketgdn0vfv65omgnd4jnvudf45vmfuq.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

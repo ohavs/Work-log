@@ -82,9 +82,12 @@ jobs:
         working-directory: android
         env:
           WL_KEYSTORE_FILE: release.jks
+          # Two secrets, not four: the alias isn't secret, and the key and
+          # store share one password — separate ones would be two things to
+          # lose instead of one, for no security gained.
           WL_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          WL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          WL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          WL_KEY_ALIAS: work-log
+          WL_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: ./gradlew --no-daemon assembleRelease
 
       - name: Build debug APK
