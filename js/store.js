@@ -66,12 +66,21 @@ export function mergeTombstones(a = {}, b = {}) {
 // of its own and refuse to take the ones from the cloud.
 const PRESENTATION_KEYS = new Set(['theme', 'palette', 'noteLayout', 'entryLayout']);
 
+// Fields that record what is happening right now rather than what the user
+// prefers. For these, "cleared" and "never set" are the same value with
+// opposite meanings, so the content rule below must not touch them: an open
+// shift that was clocked out is exactly the absence that rule is built to
+// overrule, and overruling it resurrects a finished shift from a stale copy —
+// after which the phone reminds you to clock out of a shift you already
+// closed. They follow the timestamp, always.
+const STATE_KEYS = new Set(['activeShift', 'pushTestAt']);
+
 // True when these settings are the ones a fresh install starts with — the
 // hourly rate, the goals, the jobs, the off-days and the rest all untouched.
 export function settingsAreUntouched(s) {
   const v = { ...DEFAULT_SETTINGS, ...(s || {}) };
   return Object.keys(DEFAULT_SETTINGS).every((k) => (
-    PRESENTATION_KEYS.has(k) || JSON.stringify(v[k]) === JSON.stringify(DEFAULT_SETTINGS[k])
+    PRESENTATION_KEYS.has(k) || STATE_KEYS.has(k) || JSON.stringify(v[k]) === JSON.stringify(DEFAULT_SETTINGS[k])
   ));
 }
 
@@ -104,6 +113,7 @@ export function mergeSettings(local, localTs, remote, remoteTs) {
 
   const out = {};
   for (const k of Object.keys(DEFAULT_SETTINGS)) {
+    if (STATE_KEYS.has(k)) { out[k] = remoteTs > localTs ? r[k] : l[k]; continue; }
     const lSet = isSet(l[k], DEFAULT_SETTINGS[k]);
     const rSet = isSet(r[k], DEFAULT_SETTINGS[k]);
     if (lSet && rSet) out[k] = remoteTs > localTs ? r[k] : l[k];

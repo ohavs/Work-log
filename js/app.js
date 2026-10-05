@@ -14,9 +14,9 @@ import { checkForUpdate, downloadAndInstall, openInstallSettings, fmtSize } from
 import {
   saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell,
   setStatusBarTheme, nativeStorageDriver, notificationPermission,
-  syncScheduledNotifications, cancelAllScheduled, launchUrl, onLaunchUrl,
+  syncScheduledNotifications, cancelAllScheduled, cancelScheduled, launchUrl, onLaunchUrl,
 } from './platform.js';
-import { plan, idFor } from './reminders.js';
+import { plan, idFor, shiftAlarmIds } from './reminders.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v82';
+const APP_VERSION = 'v83';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -121,12 +121,27 @@ async function loadLocalUiState() {
 }
 
 function getActive() { return activeShift; }
+// Writes made outside store.js's own chain, tracked so they can be awaited
+// before the app is backgrounded. An open shift that was cleared but not yet
+// written is an open shift again on the next launch.
+let pendingWrites = Promise.resolve();
+
 function setActive(v) {
+  const prev = activeShift;
   activeShift = v || null;
-  if (v) storage.setJSON(ACTIVE_KEY, v); else storage.remove(ACTIVE_KEY);
+  pendingWrites = pendingWrites
+    .then(() => (v ? storage.setJSON(ACTIVE_KEY, v) : storage.remove(ACTIVE_KEY)))
+    .catch((e) => { console.warn('active shift write failed:', e); });
   // Mirror the open shift into synced settings so the reminder cron can watch
   // for a forgotten clock-out even when the app is fully closed.
   try { store.saveSettings({ activeShift: v ? { start: v.start, jobId: v.jobId || '' } : null }); } catch {}
+  // Clocking out takes back that shift's alarms immediately and by id, rather
+  // than leaving it to the next schedule rebuild. The system already holds
+  // them and will fire them whether or not the app has caught up, and the
+  // rebuild is debounced, can be skipped as unchanged, and can fail — three
+  // ways to still be told at 20:00 to clock out of a shift that ended at 17:00.
+  if (!v && prev && prev.start) cancelScheduled(shiftAlarmIds(prev.start));
+  rescheduleNative({ immediate: true });
 }
 function setAutoCloseId(id) {
   autoCloseId = id || null;
@@ -1252,27 +1267,45 @@ function startReminderLoop() {
 // cancelling and re-arming every pending alarm.
 let rescheduleTimer = null;
 let lastPlanKey = '';
-function rescheduleNative({ immediate = false } = {}) {
-  if (!isNative()) return;
+
+async function doReschedule() {
   clearTimeout(rescheduleTimer);
-  rescheduleTimer = setTimeout(async () => {
-    try {
-      const items = plan({
-        settings: store.settings,
-        entries: store.entries,
-        notes: store.notes,
-        activeShift: getActive(),
-        now: Date.now(),
-      });
-      // Re-arming an identical schedule would cancel and recreate every alarm
-      // for nothing — and a rebuild in the second a reminder is due could
-      // cancel it just before it fires.
-      const key = items.map((i) => `${i.id}@${i.at}`).join('|');
-      if (key === lastPlanKey) return;
-      lastPlanKey = key;
-      await syncScheduledNotifications(items);
-    } catch (e) { console.warn('reschedule failed:', e); }
-  }, immediate ? 0 : 1200);
+  rescheduleTimer = null;
+  try {
+    const items = plan({
+      settings: store.settings,
+      entries: store.entries,
+      notes: store.notes,
+      activeShift: getActive(),
+      now: Date.now(),
+    });
+    // Re-arming an identical schedule would cancel and recreate every alarm
+    // for nothing — and a rebuild in the second a reminder is due could
+    // cancel it just before it fires.
+    const key = items.map((i) => `${i.id}@${i.at}`).join('|');
+    if (key === lastPlanKey) return;
+    const res = await syncScheduledNotifications(items);
+    // Only now. Recording the plan before the device accepted it would turn
+    // one failed sync into a permanent one: every later rebuild would compute
+    // the same key, decide nothing had changed, and skip.
+    if (res && !res.error) lastPlanKey = key;
+  } catch (e) { console.warn('reschedule failed:', e); }
+}
+
+function rescheduleNative({ immediate = false } = {}) {
+  if (!isNative()) return Promise.resolve();
+  clearTimeout(rescheduleTimer);
+  // Clocking in or out runs straight away rather than on the debounce: it's a
+  // deliberate, infrequent action, and it's the one whose alarms matter most.
+  if (immediate) return doReschedule();
+  rescheduleTimer = setTimeout(doReschedule, 1200);
+  return Promise.resolve();
+}
+
+// Anything still waiting on the debounce when the app goes away has to run
+// now — a pending rebuild that never ran is a stale schedule left armed.
+function flushReschedule() {
+  return rescheduleTimer ? doReschedule() : Promise.resolve();
 }
 // Returns 'granted' | 'denied' | 'default' | 'unsupported'. Asks the right
 // system for it — Android 13+ has its own notification permission, which the
@@ -2669,8 +2702,9 @@ async function main() {
   // clocks in has to act on the real open-shift state, not an empty one.
   initLaunchActions();
   // Storage writes are async now, so make sure a change made a moment before
-  // the app is backgrounded or closed is actually on disk.
-  onAppPause(() => store.flush());
+  // the app is backgrounded or closed is actually on disk — and that any
+  // schedule change waiting on the debounce reaches the system.
+  onAppPause(() => Promise.all([store.flush(), pendingWrites, flushReschedule()]));
 }
 main();
 

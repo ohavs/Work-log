@@ -34,6 +34,15 @@ export function idFor(key) {
   return Math.abs(h) % 2147483647 || 1;
 }
 
+// The two alarm ids belonging to one shift. Exported so clocking out can take
+// them back directly, by id, instead of waiting for a whole-schedule rebuild
+// to notice the shift is gone — see setActive() in app.js.
+export function shiftAlarmIds(start) {
+  const t = new Date(start).getTime();
+  if (!Number.isFinite(t)) return [];
+  return [idFor(`shift-remind-${t}`), idFor(`shift-max-${t}`)];
+}
+
 function at(date, { h, m }) {
   const d = new Date(date);
   d.setHours(h, m, 0, 0);

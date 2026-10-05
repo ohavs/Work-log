@@ -251,6 +251,17 @@ export async function cancelAllScheduled() {
   return syncScheduledNotifications([]);
 }
 
+// Takes back specific alarms by id. Used where waiting for the next
+// whole-schedule rebuild would be waiting too long — an alarm the system
+// already holds fires whether or not the app has caught up.
+export async function cancelScheduled(ids) {
+  if (!isNative() || !ids || !ids.length) return false;
+  const ln = plugin('LocalNotifications');
+  if (!ln) return false;
+  try { await ln.cancel({ notifications: ids.map((id) => ({ id })) }); return true; }
+  catch (e) { console.warn('could not cancel notifications:', e); return false; }
+}
+
 // ---- haptics ----
 // Deliberately silent on the web: the Vibration API is ignored or outright
 // removed in most desktop and iOS browsers, and buzzing a laptop isn't the
