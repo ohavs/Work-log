@@ -635,7 +635,9 @@
   <div class="sheet-backdrop" id="vacQuickSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3>סימון חופשה שנוצלה</h3><button class="text-btn" id="closeVacQuick">סגירה</button></div>
+      <!-- One sheet for both kinds of day off: same date, same day count, same
+           skip-rest-days rule. Only the words and the entry type differ. -->
+      <div class="sheet-head"><span class="ghost-spacer"></span><h3 id="vqTitle">סימון חופשה שנוצלה</h3><button class="text-btn" id="closeVacQuick">סגירה</button></div>
       <form id="vacQuickForm" class="form">
         <div class="field">
           <span class="field-label">תאריך התחלה</span>
@@ -655,7 +657,7 @@
           <span class="switch"><input type="checkbox" id="vqSkipOff" checked /><span class="knob"></span></span>
         </label>
         <p class="form-note" id="vqPreview"></p>
-        <button type="submit" class="btn accent big">הוספה</button>
+        <button type="submit" class="btn accent big" id="vqSubmit">הוספה</button>
       </form>
     </div>
   </div>

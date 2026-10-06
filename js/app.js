@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v85';
+const APP_VERSION = 'v86';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -549,6 +549,7 @@ function renderAbsences(entries) {
       rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">0</span></div>`);
     }
     rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.sick} ימים</span></div>`);
+    rows.push(`<button type="button" class="btn ghost-line" id="markSickBtn" style="margin-top:4px">+ סימון מחלה</button>`);
     // The rule only needs explaining where it's being applied.
     if (sick.count) rows.push(`<p class="abs-note">לפי חוק דמי מחלה: היום הראשון של כל מחלה ללא תשלום, השני והשלישי 50%, ומהרביעי 100%. ימים רצופים נספרים כמחלה אחת — ימי מנוחה באמצע לא מתחילים ספירה מחדש.</p>`);
     parts.push(`<div class="abs-group"><div class="abs-head sick">${svg('sick')} ימי מחלה</div>${rows.join('')}</div>`);
@@ -1744,6 +1745,13 @@ function submitPayroll(ev) {
 
 // ------------------------------------------------------------------ quick vacation-days entry
 let vqDate = todayISO();
+// The quick-add sheet serves both vacation and sick days — identical except
+// for the words and the type recorded. 'vacation' | 'sick'.
+let vqType = 'vacation';
+const VQ_TEXT = {
+  vacation: { title: 'סימון חופשה שנוצלה', noun: 'ימי חופשה' },
+  sick: { title: 'סימון ימי מחלה', noun: 'ימי מחלה' },
+};
 function fmtDateShort(iso) { const d = parseDate(iso); return `${d.getDate()} ב${MONTHS[d.getMonth()]}`; }
 // Walks forward from startISO collecting `days` calendar dates, optionally
 // skipping weekdays marked as non-work (settings.offDays) — a vacation day
@@ -1763,11 +1771,14 @@ function computeVacDates(startISO, days, skipOff) {
 function renderVacQuickPreview() {
   const days = Number($('vqDays').value) || 1;
   const dates = computeVacDates(vqDate, days, $('vqSkipOff').checked);
+  const noun = VQ_TEXT[vqType].noun;
   $('vqPreview').textContent = dates.length
-    ? `יתווספו ${dates.length} ימי חופשה: ${fmtDateShort(dates[0])} – ${fmtDateShort(dates[dates.length - 1])}`
+    ? `יתווספו ${dates.length} ${noun}: ${fmtDateShort(dates[0])} – ${fmtDateShort(dates[dates.length - 1])}`
     : 'לא נמצאו ימים מתאימים';
 }
-function openVacQuick() {
+function openVacQuick(type = 'vacation') {
+  vqType = VQ_TEXT[type] ? type : 'vacation';
+  $('vqTitle').textContent = VQ_TEXT[vqType].title;
   vqDate = todayISO();
   $('vqDateText').textContent = fmtDateShort(vqDate);
   setStepper('vqDays', 1);
@@ -1780,15 +1791,16 @@ function submitVacQuick(ev) {
   const days = Number($('vqDays').value) || 1;
   const dates = computeVacDates(vqDate, days, $('vqSkipOff').checked);
   if (!dates.length) { toast('לא נמצאו ימים מתאימים'); return; }
+  const noun = VQ_TEXT[vqType].noun;
   const alreadyTaken = new Set(store.entries.map((e) => e.date));
-  const toAdd = dates.filter((iso) => !alreadyTaken.has(iso)).map((date) => ({ type: 'vacation', date, jobId: '', start: '', end: '', breakMin: 0, rate: '', note: '' }));
+  const toAdd = dates.filter((iso) => !alreadyTaken.has(iso)).map((date) => ({ type: vqType, date, jobId: '', start: '', end: '', breakMin: 0, rate: '', note: '' }));
   if (!toAdd.length) { toast('כל הימים שנבחרו כבר קיימים ברישום'); return; }
   const created = store.addEntries(toAdd);
   const skipped = dates.length - toAdd.length;
   const d0 = parseDate(dates[0]); viewYear = d0.getFullYear(); viewMonth = d0.getMonth();
   closeSheet($('vacQuickSheet'));
   renderMonth(); renderAll(); renderMore();
-  toast(skipped ? `נוספו ${created.length} ימי חופשה (${skipped} דולגו — כבר קיים רישום)` : `נוספו ${created.length} ימי חופשה`);
+  toast(skipped ? `נוספו ${created.length} ${noun} (${skipped} דולגו — כבר קיים רישום)` : `נוספו ${created.length} ${noun}`);
 }
 
 // ------------------------------------------------------------------ tabs
@@ -2308,7 +2320,8 @@ function bind() {
   });
   // The vacation card moved to the reports page, and its button with it.
   $('absenceBody').addEventListener('click', (e) => {
-    if (e.target.closest('#markVacBtn')) openVacQuick();
+    if (e.target.closest('#markVacBtn')) openVacQuick('vacation');
+    else if (e.target.closest('#markSickBtn')) openVacQuick('sick');
   });
   $('closeVacQuick').onclick = () => closeSheet($('vacQuickSheet'));
   $('vacQuickForm').onsubmit = submitVacQuick;
