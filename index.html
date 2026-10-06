@@ -102,6 +102,18 @@
         <div class="weekly-body" id="monthlyBody" hidden></div>
       </div>
 
+      <!-- Absences live here rather than on the "עוד" page: one tap from the
+           home screen, alongside the month they belong to, without taking
+           space on the front. -->
+      <div class="weekly" id="absenceCard" hidden>
+        <button type="button" class="weekly-head" id="absenceToggle" aria-expanded="false">
+          <span class="weekly-title">חופשה ומחלה</span>
+          <span class="weekly-sub" id="absenceSummary"></span>
+          <span class="chev" id="absenceChev"></span>
+        </button>
+        <div class="weekly-body" id="absenceBody" hidden></div>
+      </div>
+
       <div class="list-head">
         <h2>רישומים <span class="list-count" id="listCount"></span></h2>
         <div class="list-head-btns">

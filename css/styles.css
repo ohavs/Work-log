@@ -197,6 +197,26 @@ svg { display: block; }
 .weekly-head .chev { display: grid; place-items: center; color: var(--muted-fg); transition: transform .25s; }
 .weekly-head .chev svg { width: 20px; height: 20px; }
 .weekly-head[aria-expanded="true"] .chev { transform: rotate(180deg); }
+/* A one-line answer on the collapsed header, so the card is worth something
+   without opening it. margin-inline-start:auto pushes the chevron to the end
+   while this sits next to the title. */
+.weekly-sub { margin-inline-start: auto; margin-inline-end: 10px; font-size: 12.5px; font-weight: 600; color: var(--muted-fg); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- absences (vacation + sick) ---------- */
+.abs-group + .abs-group { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--border); }
+.abs-head { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 800; margin-bottom: 8px; }
+.abs-head svg { width: 17px; height: 17px; }
+.abs-head.vac { color: var(--primary); }
+.abs-head.sick { color: var(--accent); }
+.abs-note { font-size: 12px; color: var(--muted-fg); line-height: 1.6; margin: 6px 0 0; }
+/* One row per sick day: which day of the illness it is, and what it paid. */
+.sick-day { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.sick-date { color: var(--muted-fg); white-space: nowrap; }
+.sick-pct { margin-inline-start: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+.sick-pct[data-f="0"] { color: var(--muted-fg); }
+.sick-pct[data-f="0.5"] { color: var(--accent); }
+.sick-pct[data-f="1"] { color: var(--primary); }
+.sick-nth { font-size: 11.5px; color: var(--muted-fg); background: var(--surface-2); border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
 .weekly-body { padding: 0 18px 16px; display: flex; flex-direction: column; gap: 12px; }
 .week-row { display: flex; align-items: center; gap: 8px; }
 .week-name { font-size: 13px; color: var(--muted-fg); flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

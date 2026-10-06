@@ -74,6 +74,82 @@ function expectedMonthlyHours(settings, y, m) {
   return daily * scheduled;
 }
 
+// ---------------------------------------------------------------- sick pay
+// חוק דמי מחלה: within one illness, the first day is unpaid, the second and
+// third are paid at half, and from the fourth day on in full.
+export const SICK_PAY_LADDER = [0, 0.5, 0.5];
+export function sickPayFactor(dayInEpisode) {
+  if (!(dayInEpisode >= 1)) return 0;
+  return dayInEpisode <= SICK_PAY_LADDER.length ? SICK_PAY_LADDER[dayInEpisode - 1] : 1;
+}
+
+// True when nothing but non-working days separates two sick days. Being off
+// sick on Thursday and again on Sunday, with Friday and Saturday not worked,
+// is one illness — not two first days, each of them unpaid. Any other gap
+// means recovering and falling ill again, which the ladder restarts for.
+function onlyOffDaysBetween(aISO, bISO, off) {
+  const a = parseDate(aISO), b = parseDate(bISO);
+  const gap = Math.round((b - a) / 86400000);
+  if (gap <= 0) return false;
+  if (gap === 1) return true;
+  // A long gap is a new illness however the days in it fall — without this,
+  // someone whose whole week is off-days would have every sick day they ever
+  // record treated as one unbroken illness.
+  if (gap > 7) return false;
+  for (let i = 1; i < gap; i++) {
+    const d = new Date(a); d.setDate(a.getDate() + i);
+    if (!off.includes(d.getDay())) return false;
+  }
+  return true;
+}
+
+// Which day of an illness each recorded sick day is.
+//
+// Deliberately takes ALL entries, not one month's: the ladder counts within
+// an illness, so an illness running from the 30th to the 2nd has its fourth
+// day in the following month, and a month looked at in isolation would pay
+// that day as a first day — unpaid.
+export function sickDayIndex(entries, settings) {
+  const off = Array.isArray(settings && settings.offDays) ? settings.offDays : [];
+  const dates = [...new Set(entries.filter((e) => entryType(e) === 'sick' && e.date).map((e) => e.date))].sort();
+  const out = new Map();
+  let idx = 0, prev = null;
+  for (const d of dates) {
+    idx = prev && onlyOffDaysBetween(prev, d, off) ? idx + 1 : 1;
+    out.set(d, idx);
+    prev = d;
+  }
+  return out;
+}
+
+// One month's sick days, each with the day of the illness it is and what that
+// pays — the detail the reports page shows, and the same numbers grossForMonth
+// bills from.
+export function sickMonth(entries, settings, y, m) {
+  const p = payrollOf(settings);
+  const idx = sickDayIndex(entries, settings);
+  const perDay = Number(p.sickDayHours) || 0;
+  const days = entries
+    .filter((e) => entryType(e) === 'sick' && inMonth(e, y, m))
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    .map((e) => {
+      const dayInEpisode = idx.get(e.date) || 1;
+      const factor = sickPayFactor(dayInEpisode);
+      const rate = p.payMode === 'global' ? 0 : rateOf(e, settings);
+      return { date: e.date, dayInEpisode, factor, hours: perDay * factor, pay: perDay * factor * rate };
+    });
+  return {
+    days,
+    count: days.length,
+    unpaid: days.filter((d) => d.factor === 0).length,
+    half: days.filter((d) => d.factor === 0.5).length,
+    full: days.filter((d) => d.factor === 1).length,
+    paidHours: days.reduce((s, d) => s + d.hours, 0),
+    fullHours: perDay * days.length,
+    pay: days.reduce((s, d) => s + d.pay, 0),
+  };
+}
+
 // Gross for a month. With overtime on, tiers are paid 125%/150%.
 // Sick days (יום מחלה) are paid days off — credited at a fixed hours/day
 // (settings.payroll.sickDayHours, default 8.4h) and taxed like regular income, but
@@ -89,7 +165,12 @@ function expectedMonthlyHours(settings, y, m) {
 // against, so the full fixed amount is paid regardless of hours.
 export function grossForMonth(entries, settings, y, m) {
   const p = payrollOf(settings);
-  let hours = 0, sickGross = 0, vacationDays = 0;
+  // Sick days are billed from the ladder, not at a flat day's pay — see
+  // sickMonth(). Computed from ALL entries so an illness that started last
+  // month keeps counting into this one.
+  const sick = sickMonth(entries, settings, y, m);
+  let hours = 0, vacationDays = 0;
+  const sickGross = p.payMode === 'global' ? 0 : sick.pay;
   const dayHours = new Map();
   const dayPayFlat = new Map();
   entries.forEach((e) => {
@@ -103,9 +184,11 @@ export function grossForMonth(entries, settings, y, m) {
         dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
       }
     } else if (entryType(e) === 'sick') {
-      const h = Number(p.sickDayHours) || 0;
-      hours += h;
-      if (p.payMode !== 'global') sickGross += h * rateOf(e, settings);
+      // The hours a sick day credits are reported in full — it's a day off
+      // that was taken, whatever share of it was paid. What the ladder scales
+      // is the money, and (below) how much of the month a global salary
+      // counts as covered.
+      hours += Number(p.sickDayHours) || 0;
     } else if (entryType(e) === 'vacation') {
       vacationDays++;
     }
@@ -122,13 +205,17 @@ export function grossForMonth(entries, settings, y, m) {
     const base = Number(p.globalSalary) || 0; // the cap — gross never exceeds this, no bonus for extra hours
     const expected = expectedMonthlyHours(settings, y, m);
     const dailyTarget = dailyHourTargetOf(settings);
-    const coveredHours = hours + vacationDays * dailyTarget; // worked + sick-credited + vacation (excused, not a shortfall)
+    // Worked + vacation (excused, not a shortfall) + the PAID share of the
+    // sick days. A fixed salary is docked for a shortfall, so billing the
+    // ladder here is the same thing as paying it: an unpaid first sick day
+    // leaves a full day uncovered, a half-paid one leaves half.
+    const coveredHours = hours - sick.fullHours + sick.paidHours + vacationDays * dailyTarget;
     const rate = Number(settings.rate) || 0; // the actual configured hourly rate — not a derived salary/hours ratio
     let gross = base;
     if (expected > 0 && coveredHours < expected && rate > 0) {
       gross = Math.max(0, base - (expected - coveredHours) * rate);
     }
-    return { gross, hours, ot125, ot150 };
+    return { gross, hours, ot125, ot150, sick };
   }
 
   let gross = sickGross;
@@ -142,7 +229,7 @@ export function grossForMonth(entries, settings, y, m) {
       gross += flatPay;
     }
   }
-  return { gross, hours, ot125, ot150 };
+  return { gross, hours, ot125, ot150, sick };
 }
 
 // Travel/commute reimbursement for a month — either a fixed ₪ amount per day
@@ -167,14 +254,14 @@ export function travelForMonth(entries, settings, y, m) {
 // Estimated payslip: gross → deductions → net (+ untaxed travel reimbursement).
 export function payslip(entries, settings, y, m) {
   const p = payrollOf(settings);
-  const { gross, hours, ot125, ot150 } = grossForMonth(entries, settings, y, m);
+  const { gross, hours, ot125, ot150, sick } = grossForMonth(entries, settings, y, m);
   const incomeTax = gross * (p.incomeTax / 100);
   const socialHealth = gross * (p.socialHealth / 100);
   const pension = gross * (p.pensionEmployee / 100);
   const deductions = incomeTax + socialHealth + pension;
   const travel = travelForMonth(entries, settings, y, m).total;
   const net = Math.max(0, gross - deductions) + travel;
-  return { gross, hours, ot125, ot150, incomeTax, socialHealth, pension, deductions, travel, net };
+  return { gross, hours, ot125, ot150, sick, incomeTax, socialHealth, pension, deductions, travel, net };
 }
 
 // Pension accrual for a month (employee + employer + severance).

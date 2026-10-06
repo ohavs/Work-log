@@ -6,7 +6,7 @@ import { initIcons, svg } from './icons.js';
 import { initPickers, openTimePicker, openDatePicker, showConfirm, dismissTopOverlay, isOverlayOpen, setOverlayChangeHandler } from './pickers.js';
 import {
   DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
-  yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth,
+  yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth, sickMonth,
 } from './finance.js';
 import { uid } from './util.js';
 import { storage, setStorageDriver, migrateStorage, localDriver } from './storage.js';
@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v83';
+const APP_VERSION = 'v84';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -44,6 +44,7 @@ let editingId = null;
 let formType = 'work';
 let weeklyOpen = false;
 let monthlyOpen = false;
+let absenceOpen = false;
 let moreOpen = false;
 let jobFilter = null;       // null = all workplaces; else jobId
 let editingJobId = null;
@@ -492,6 +493,62 @@ function renderMonthlyReport(entries) {
   body.hidden = !monthlyOpen;
 }
 
+// Vacation and sick days for the viewed month, plus the year's vacation
+// balance. On the reports page rather than the "עוד" page: it belongs beside
+// the month it describes, and it's something you check a few times a year
+// rather than never.
+function renderAbsences(entries) {
+  const card = $('absenceCard'), body = $('absenceBody');
+  if (!card || !body) return;
+  const s = store.settings;
+  // sickMonth needs every entry, not the month's: an illness that began last
+  // month carries its day count into this one.
+  const sick = sickMonth(store.entries, s, viewYear, viewMonth);
+  const vacDays = entries.filter((e) => entryType(e) === 'vacation').length;
+  const vb = vacationBalance(store.entries, s, viewYear);
+
+  if (!sick.count && !vacDays && !vb.used && !vb.entitled) { card.hidden = true; return; }
+  card.hidden = false;
+
+  const parts = [];
+  const sum = [];
+  if (vacDays) sum.push(`${vacDays} חופשה`);
+  if (sick.count) sum.push(`${sick.count} מחלה`);
+  $('absenceSummary').textContent = sum.join(' · ');
+
+  // --- vacation ---
+  if (vb.entitled || vb.used || vacDays) {
+    const rows = [];
+    rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">${vacDays}</span></div>`);
+    rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.used} מתוך ${vb.entitled}</span></div>`);
+    rows.push(`<div class="week-row"><span class="week-name">יתרה</span><span class="week-val ${vb.remaining > 0 ? 'pos' : ''}">${vb.remaining} ימים</span></div>`);
+    rows.push(`<button type="button" class="btn ghost-line" id="markVacBtn" style="margin-top:4px">+ סימון חופשה שנוצלה</button>`);
+    parts.push(`<div class="abs-group"><div class="abs-head vac">${svg('vacation')} ימי חופשה</div>${rows.join('')}</div>`);
+  }
+
+  // --- sick ---
+  if (sick.count) {
+    const rows = sick.days.map((d) => {
+      const dt = parseDate(d.date);
+      const pct = d.factor === 0 ? 'ללא תשלום' : `${d.factor * 100}%`;
+      return `<div class="sick-day">
+        <span class="sick-date">${dt.getDate()} ב${MONTHS[dt.getMonth()]}</span>
+        <span class="sick-nth">יום ${d.dayInEpisode} למחלה</span>
+        <span class="sick-pct" data-f="${d.factor}">${pct}</span>
+      </div>`;
+    });
+    const anyRate = (Number(s.rate) || 0) > 0 || sick.pay > 0;
+    if (anyRate) rows.push(`<div class="week-row"><span class="week-name">תשלום דמי מחלה</span><span class="week-val">${fmtMoney(sick.pay, s.currency)}</span></div>`);
+    rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.sick} ימים</span></div>`);
+    rows.push(`<p class="abs-note">לפי חוק דמי מחלה: היום הראשון של כל מחלה ללא תשלום, השני והשלישי 50%, ומהרביעי 100%. ימים רצופים נספרים כמחלה אחת — ימי מנוחה באמצע לא מתחילים ספירה מחדש.</p>`);
+    parts.push(`<div class="abs-group"><div class="abs-head sick">${svg('sick')} ימי מחלה</div>${rows.join('')}</div>`);
+  }
+
+  body.innerHTML = parts.join('');
+  $('absenceToggle').setAttribute('aria-expanded', String(absenceOpen));
+  body.hidden = !absenceOpen;
+}
+
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function entryLayout() { return store.settings.entryLayout === 'compact' ? 'compact' : 'detailed'; }
@@ -657,7 +714,7 @@ function toggleEntryExpand(id) {
   }
 }
 
-function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderMonthlyReport(e); renderEntries(e); }
+function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderMonthlyReport(e); renderAbsences(e); renderEntries(e); }
 
 // ------------------------------------------------------------------ bulk selection / delete
 function updateSelectBar() {
@@ -1581,16 +1638,9 @@ function renderMore() {
     </div>
   </div>`;
 
-  // --- vacation balance ---
-  const vb = vacationBalance(entries, s, viewYear);
-  const vpct = vb.entitled ? Math.min(100, (vb.used / vb.entitled) * 100) : 0;
-  html += `
-  <div class="fcard">
-    <div class="fcard-head accent"><span class="fic">${svg('vacation')}</span><span class="fcard-title">חופשה ${viewYear}</span><span class="fcard-sub">${vb.sick} ימי מחלה</span></div>
-    <div class="vac-track"><div class="vac-fill" style="width:${vpct}%"></div></div>
-    <div class="frow" style="border:none;padding-top:2px"><span class="fk">נוצלו ${vb.used} מתוך ${vb.entitled}</span><span class="fv">נותרו ${vb.remaining} ימים</span></div>
-    <button type="button" class="btn ghost-line" id="markVacBtn" style="margin-top:10px">+ סימון חופשה שנוצלה</button>
-  </div>`;
+  // Vacation and sick days are on the reports page now (renderAbsences) —
+  // beside the month they describe, one tap from home, instead of at the
+  // bottom of this one.
 
   // --- recreation ---
   const rc = recreationAnnual(s);
@@ -2245,6 +2295,9 @@ function bind() {
   $('moreCards').addEventListener('click', (e) => {
     const y = e.target.closest('button[data-yr]');
     if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); return; }
+  });
+  // The vacation card moved to the reports page, and its button with it.
+  $('absenceBody').addEventListener('click', (e) => {
     if (e.target.closest('#markVacBtn')) openVacQuick();
   });
   $('closeVacQuick').onclick = () => closeSheet($('vacQuickSheet'));
@@ -2412,6 +2465,7 @@ function bind() {
 
   $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
   $('monthlyToggle').onclick = () => { monthlyOpen = !monthlyOpen; $('monthlyToggle').setAttribute('aria-expanded', String(monthlyOpen)); $('monthlyBody').hidden = !monthlyOpen; };
+  $('absenceToggle').onclick = () => { absenceOpen = !absenceOpen; $('absenceToggle').setAttribute('aria-expanded', String(absenceOpen)); $('absenceBody').hidden = !absenceOpen; };
 
   $('settingsBtn').onclick = openSettings;
   $('themeToggle').onclick = toggleTheme;
