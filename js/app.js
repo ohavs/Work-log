@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v84';
+const APP_VERSION = 'v85';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -510,14 +510,18 @@ function renderAbsences(entries) {
   if (!sick.count && !vacDays && !vb.used && !vb.entitled) { card.hidden = true; return; }
   card.hidden = false;
 
-  const parts = [];
+  // Both halves, always. A card called "חופשה ומחלה" that shows only one of
+  // them reads as broken rather than as "none this month" — the absence of a
+  // section says nothing, while a zero says exactly what it means.
   const sum = [];
   if (vacDays) sum.push(`${vacDays} חופשה`);
   if (sick.count) sum.push(`${sick.count} מחלה`);
-  $('absenceSummary').textContent = sum.join(' · ');
+  $('absenceSummary').textContent = sum.length ? sum.join(' · ') : 'אין החודש';
+
+  const parts = [];
 
   // --- vacation ---
-  if (vb.entitled || vb.used || vacDays) {
+  {
     const rows = [];
     rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">${vacDays}</span></div>`);
     rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.used} מתוך ${vb.entitled}</span></div>`);
@@ -527,20 +531,26 @@ function renderAbsences(entries) {
   }
 
   // --- sick ---
-  if (sick.count) {
-    const rows = sick.days.map((d) => {
-      const dt = parseDate(d.date);
-      const pct = d.factor === 0 ? 'ללא תשלום' : `${d.factor * 100}%`;
-      return `<div class="sick-day">
-        <span class="sick-date">${dt.getDate()} ב${MONTHS[dt.getMonth()]}</span>
-        <span class="sick-nth">יום ${d.dayInEpisode} למחלה</span>
-        <span class="sick-pct" data-f="${d.factor}">${pct}</span>
-      </div>`;
-    });
-    const anyRate = (Number(s.rate) || 0) > 0 || sick.pay > 0;
-    if (anyRate) rows.push(`<div class="week-row"><span class="week-name">תשלום דמי מחלה</span><span class="week-val">${fmtMoney(sick.pay, s.currency)}</span></div>`);
+  {
+    const rows = [];
+    if (sick.count) {
+      rows.push(...sick.days.map((d) => {
+        const dt = parseDate(d.date);
+        const pct = d.factor === 0 ? 'ללא תשלום' : `${d.factor * 100}%`;
+        return `<div class="sick-day">
+          <span class="sick-date">${dt.getDate()} ב${MONTHS[dt.getMonth()]}</span>
+          <span class="sick-nth">יום ${d.dayInEpisode} למחלה</span>
+          <span class="sick-pct" data-f="${d.factor}">${pct}</span>
+        </div>`;
+      }));
+      const anyRate = (Number(s.rate) || 0) > 0 || sick.pay > 0;
+      if (anyRate) rows.push(`<div class="week-row"><span class="week-name">תשלום דמי מחלה</span><span class="week-val">${fmtMoney(sick.pay, s.currency)}</span></div>`);
+    } else {
+      rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">0</span></div>`);
+    }
     rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.sick} ימים</span></div>`);
-    rows.push(`<p class="abs-note">לפי חוק דמי מחלה: היום הראשון של כל מחלה ללא תשלום, השני והשלישי 50%, ומהרביעי 100%. ימים רצופים נספרים כמחלה אחת — ימי מנוחה באמצע לא מתחילים ספירה מחדש.</p>`);
+    // The rule only needs explaining where it's being applied.
+    if (sick.count) rows.push(`<p class="abs-note">לפי חוק דמי מחלה: היום הראשון של כל מחלה ללא תשלום, השני והשלישי 50%, ומהרביעי 100%. ימים רצופים נספרים כמחלה אחת — ימי מנוחה באמצע לא מתחילים ספירה מחדש.</p>`);
     parts.push(`<div class="abs-group"><div class="abs-head sick">${svg('sick')} ימי מחלה</div>${rows.join('')}</div>`);
   }
 

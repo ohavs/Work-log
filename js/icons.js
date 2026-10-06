@@ -56,6 +56,7 @@ export function initIcons() {
   set('nextMonth', 'chevLeft');
   set('weeklyChev', 'chevDown');
   set('monthlyChev', 'chevDown');
+  set('absenceChev', 'chevDown');
   set('moreChev', 'chevDown');
   set('dpPrev', 'chevRight');
   set('dpNext', 'chevLeft');
