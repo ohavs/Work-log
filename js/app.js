@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v86';
+const APP_VERSION = 'v87';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -171,7 +171,7 @@ function autoCloseActive(active) {
     const startD = new Date(active.start);
     const endD = new Date(active.start + autoCloseMs());
     const breakMin = suggestedBreakMinutes(rawShiftMinutes(hhmm(startD), hhmm(endD)), store.settings);
-    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '', autoClosed: true };
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '', autoClosed: true, shiftStart: active.start };
     const created = store.addEntry(entry);
     if (!created) {
       // Daily cap already reached (2 work shifts today) — leave the active
@@ -253,7 +253,12 @@ function punch() {
       return;
     }
     const breakMin = suggestedBreakMinutes(rawShiftMinutes(hhmm(startD), hhmm(endD)), store.settings);
-    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '' };
+    // shiftStart records WHICH shift this entry closed. The reminder worker
+    // watches settings.activeShift, which is only a mirror of the open shift
+    // and can go stale; this lets it ask the entries — the authoritative
+    // record — whether that shift was already clocked out, without having to
+    // reconstruct the answer from a date and a timezone.
+    const entry = { type: 'work', date: toISO(startD), jobId: active.jobId || jobFilter || '', start: hhmm(startD), end: hhmm(endD), breakMin, rate: '', note: '', shiftStart: active.start };
     // Add the entry BEFORE clearing the active shift: clearing it fires a
     // synchronous change event that re-checks the daily reminder, and if the
     // entry didn't exist yet at that instant, it would look like "nothing

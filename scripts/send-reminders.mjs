@@ -5,6 +5,9 @@
 // Env: FIREBASE_SERVICE_ACCOUNT (JSON), VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_SUBJECT
 import admin from 'firebase-admin';
 import webpush from 'web-push';
+// Shared with the Cloudflare worker so the two senders can't disagree about
+// whether someone is at work — see cloudflare/src/shift-state.mjs.
+import { openShiftOf } from '../cloudflare/src/shift-state.mjs';
 
 const svc = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT || '{}');
 if (!svc.project_id) { console.error('Missing FIREBASE_SERVICE_ACCOUNT'); process.exit(1); }
@@ -101,7 +104,9 @@ async function run() {
     const [rh, rm] = String(s.reminderTime || '18:00').split(':').map(Number);
     const target = (rh || 0) * 60 + (rm || 0);
     if (minutes < target || minutes >= target + WINDOW_MIN) continue; // not in the send window
-    if (s.activeShift && Number(s.activeShift.start)) continue;      // already clocked in
+    // Resolved against the entries, not read straight from settings: a stale
+    // activeShift would silently suppress this reminder every single day.
+    if (openShiftOf(data, s.tz)) continue;                          // already clocked in
     if (Array.isArray(s.offDays) && s.offDays.includes(dow)) continue; // marked as a non-work day
     const entries = Array.isArray(data.entries) ? data.entries : [];
     if (entries.some((e) => e && e.date === date)) continue;        // already logged today

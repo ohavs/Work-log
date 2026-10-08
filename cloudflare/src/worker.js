@@ -9,6 +9,8 @@
 //   VAPID_SUBJECT    – e.g. mailto:you@example.com
 // Trigger: Cron Triggers → "* * * * *" (every minute).
 
+import { openShiftOf } from './shift-state.mjs';
+
 export default {
   async scheduled(event, env, ctx) { ctx.waitUntil(run(env)); },
   // Visiting the Worker URL runs it once too (handy for a manual test).
@@ -198,7 +200,7 @@ async function run(env) {
 
     // 2) forgotten clock-out: an open shift synced from the app (settings.activeShift).
     //    9h → gentle "still counting" reminder; 12h → "auto-closed" notice. Deduped per shift.
-    const act = s.activeShift;
+    const act = openShiftOf(data, s.tz);
     if (act && Number(act.start)) {
       const hrs = (Date.now() - Number(act.start)) / 3600000;
       const remindH = Math.min(23, Math.max(1, Math.round(Number(s.shiftRemindHours) || 9)));   // user-configurable
