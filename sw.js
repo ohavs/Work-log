@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v87';
+const CACHE = 'worklog-v88';
 const SHELL = [
   './',
   './index.html',
@@ -49,23 +49,9 @@ self.addEventListener('install', (e) => {
   );
 });
 
-// Background push from the reminder cron → show a system notification.
-self.addEventListener('push', (e) => {
-  let data = {};
-  try { data = e.data ? e.data.json() : {}; } catch (_) { data = { body: e.data && e.data.text() }; }
-  const title = data.title || 'שעון עבודה';
-  const body = data.body || 'עוד לא רשמת שעות היום — הקש כדי להזין';
-  // Unique tag per push so each one alerts (a fixed tag silently replaces the
-  // previous notification without re-alerting on many devices).
-  const tag = data.tag || ('wl-' + Date.now());
-  e.waitUntil(self.registration.showNotification(title, {
-    body, tag, renotify: true, vibrate: [120, 60, 120],
-    icon: './icons/icon-192.png', badge: './icons/icon-192.png',
-    dir: 'rtl', lang: 'he', data: { url: './' },
-  }));
-});
-
-// Tapping a reminder notification focuses an open tab or opens the app.
+// Tapping a reminder notification focuses an open tab or opens the app. The
+// notifications themselves are shown by the page (through this worker's
+// registration) while it's open — there is no push sender behind them.
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   e.waitUntil((async () => {

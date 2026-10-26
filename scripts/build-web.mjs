@@ -21,7 +21,7 @@ const OUT = join(ROOT, 'www');
 // Not part of the shipped web app.
 const EXCLUDE = new Set([
   'www', 'android', 'ios', 'node_modules', '.git', '.github', '.claude',
-  'scripts', 'cloudflare', 'design-system',
+  'scripts', 'design-system',
   // Source images the launcher icons and splash screens are generated FROM.
   // The generated resources live in android/app/src/main/res; shipping the
   // 2732px originals inside the APK would add megabytes for nothing.

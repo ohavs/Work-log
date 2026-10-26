@@ -27,7 +27,7 @@ android/                פרויקט אנדרואיד — מנוהל בגיט, �
 | רטט | לא | כן |
 | אחסון | localStorage | Preferences נייטיב (`js/storage.js`) |
 | התחברות Google | popup/redirect | Play Services → טוקן ל-SDK של הווב |
-| תזכורות | Cloudflare Worker → web push | התראות מתוזמנות במערכת (`js/reminders.js`) |
+| תזכורות | רק כשהדף פתוח (`js/reminders.js`) | התראות מתוזמנות במערכת (`js/reminders.js`) |
 | עדכונים | Service Worker | מתוך ההגדרות (`js/update.js`) |
 | קיצורי אייקון | `manifest.webmanifest` | `res/xml/shortcuts.xml` |
 

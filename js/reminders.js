@@ -1,10 +1,10 @@
 // What the app should notify about, and when.
 //
-// On the web this can only happen while something is running: a tab that's
-// open, or the Cloudflare worker pushing to a service worker. The Android
-// build doesn't need either — Android's alarm manager will wake the app at a
-// time agreed in advance, with the app closed and the phone offline. That is
-// the single biggest thing a real app buys over a web page here.
+// On the web this can only happen while a tab of ours is open — see
+// dueNotes() at the bottom, which the foreground loop polls. The Android
+// build doesn't need anything running: Android's alarm manager wakes the app
+// at a time agreed in advance, with the app closed and the phone offline.
+// That is the single biggest thing a real app buys over a web page here.
 //
 // The catch is that the alarm is agreed in ADVANCE, so conditions the system
 // can't evaluate ("only if no hours were logged that day") have to be decided
@@ -47,6 +47,14 @@ function at(date, { h, m }) {
   const d = new Date(date);
   d.setHours(h, m, 0, 0);
   return d.getTime();
+}
+
+// A note's title and body as a notification would word them.
+function noteText(nt) {
+  return {
+    title: String(nt.title || '').trim() || 'תזכורת',
+    body: String(nt.body || '').trim() || 'יש לך תזכורת בפנקס',
+  };
 }
 
 export function plan({ settings = {}, entries = [], notes = [], activeShift = null, now = Date.now(), days = PLAN_DAYS } = {}) {
@@ -97,8 +105,7 @@ export function plan({ settings = {}, entries = [], notes = [], activeShift = nu
   const horizon = nowMs + days * 86400000;
   for (const nt of notes) {
     if (!nt || !nt.id) continue;
-    const title = String(nt.title || '').trim() || 'תזכורת';
-    const body = String(nt.body || '').trim() || 'יש לך תזכורת בפנקס';
+    const { title, body } = noteText(nt);
 
     // one-off
     const once = Number(nt.remindAt) || 0;
@@ -115,6 +122,47 @@ export function plan({ settings = {}, entries = [], notes = [], activeShift = nu
         const when = at(d, time);
         if (when > horizon) break;
         push(`noteweekly-${nt.id}-${iso(d)}`, when, title, body);
+      }
+    }
+  }
+
+  return out.sort((a, b) => a.at - b.at);
+}
+
+// The note reminders that came due in (after, until] — what the web build
+// shows, since nothing there can wake a closed tab. The foreground loop calls
+// this every minute with the time of its previous call.
+//
+// A tab that was asleep (laptop lid, background tab) comes back with a window
+// hours wide, so the catch-up is capped: a reminder older than that is stale
+// enough that announcing it would be noise, not news.
+export const MAX_CATCH_UP_MS = 6 * 3600000;
+
+export function dueNotes({ notes = [], after = 0, until = Date.now(), maxCatchUp = MAX_CATCH_UP_MS } = {}) {
+  const out = [];
+  const from = Math.max(Number(after) || 0, until - maxCatchUp);
+  if (!(until > from)) return out;
+  const due = (t) => t > from && t <= until;
+
+  for (const nt of notes) {
+    if (!nt || !nt.id) continue;
+    const { title, body } = noteText(nt);
+
+    const once = Number(nt.remindAt) || 0;
+    if (once && due(once)) out.push({ id: idFor(`note-${nt.id}-${once}`), key: `note-${nt.id}-${once}`, at: once, title, body });
+
+    const r = nt.remind;
+    if (r && r.mode === 'weekly' && Array.isArray(r.days) && r.days.length && r.time) {
+      const time = hhmm(r.time, '09:00');
+      // Walk the days the window touches — usually one, more only after a
+      // long sleep. Start a day early so a window that opens just after
+      // midnight still sees yesterday evening's reminder.
+      for (let d = new Date(from - 86400000); d.getTime() <= until + 86400000; d.setDate(d.getDate() + 1)) {
+        if (!r.days.includes(d.getDay())) continue;
+        const when = at(d, time);
+        if (!due(when)) continue;
+        const key = `noteweekly-${nt.id}-${iso(d)}`;
+        out.push({ id: idFor(key), key, at: when, title, body });
       }
     }
   }

@@ -17,7 +17,6 @@ const LS_SETTINGS = 'wl_settings';
 const LS_NOTES = 'wl_notes';
 const LS_CATS = 'wl_notecats';
 const LS_TOMB = 'wl_tombstones';
-const LS_PUSH = 'wl_pushsubs';
 const LS_SETTINGS_TS = 'wl_settings_ts';
 const LS_USER = 'wl_user';
 const TOMB_TTL = 90 * 86400000; // keep delete markers 90 days
@@ -27,7 +26,7 @@ const TOMB_TTL = 90 * 86400000; // keep delete markers 90 days
 // copies the lot out of the WebView's localStorage on its first run — a key
 // missing from this list is a key that silently doesn't survive that move.
 export const STORAGE_KEYS = [
-  LS_ENTRIES, LS_SETTINGS, LS_NOTES, LS_CATS, LS_TOMB, LS_PUSH,
+  LS_ENTRIES, LS_SETTINGS, LS_NOTES, LS_CATS, LS_TOMB,
   LS_SETTINGS_TS, LS_USER,
   'wl_active', 'wl_autoclose',
 ];
@@ -73,7 +72,7 @@ const PRESENTATION_KEYS = new Set(['theme', 'palette', 'noteLayout', 'entryLayou
 // overrule, and overruling it resurrects a finished shift from a stale copy —
 // after which the phone reminds you to clock out of a shift you already
 // closed. They follow the timestamp, always.
-const STATE_KEYS = new Set(['activeShift', 'pushTestAt']);
+const STATE_KEYS = new Set(['activeShift']);
 
 // True when these settings are the ones a fresh install starts with — the
 // hourly rate, the goals, the jobs, the off-days and the rest all untouched.
@@ -146,7 +145,7 @@ export const DEFAULT_SETTINGS = {
   reminderTime: '18:00',
   noteLayout: 'detailed', // 'detailed' | 'compact'
   entryLayout: 'detailed', // 'detailed' | 'compact' — רישומים: כרטיסים מלאים או רשת אריחים
-  activeShift: null,   // { start, jobId } while clocked in — synced so the cron can watch for a forgotten clock-out
+  activeShift: null,   // { start, jobId } while clocked in — synced so another device sees the open shift
   shiftRemindHours: 9, // שכחתי-לצאת: אחרי כמה שעות פתוחות לשלוח תזכורת
   shiftMaxHours: 12,   // שכחתי-לצאת: אחרי כמה שעות לסגור אוטומטית (ולהגביל את המשמרת)
   offDays: [],         // ימים בשבוע (0=ראשון..6=שבת) בהם לא נשלחת תזכורת יומית
@@ -157,7 +156,6 @@ class Store {
     this.entries = [];
     this.notes = [];              // [{ id, title, category, body, fields[], checklist[], tags[], pinned, created, updated }]
     this.noteCats = [];           // [{ id, name, color }]
-    this.pushSubs = [];           // web-push subscriptions, one per device (merged by endpoint)
     this.tombstones = { e: {}, n: {}, c: {} }; // deleted-id → timestamp, per collection
     this._dirty = false;          // local changes not yet confirmed on the server
     this._settingsTs = 0;         // last local settings change (for last-write-wins)
@@ -203,13 +201,12 @@ class Store {
 
   // ---- local storage ----
   async _loadLocal() {
-    const [e, s, n, c, t, ps, ts, u] = await Promise.all([
+    const [e, s, n, c, t, ts, u] = await Promise.all([
       storage.getJSON(LS_ENTRIES, []),
       storage.getJSON(LS_SETTINGS, null),
       storage.getJSON(LS_NOTES, []),
       storage.getJSON(LS_CATS, []),
       storage.getJSON(LS_TOMB, null),
-      storage.getJSON(LS_PUSH, []),
       storage.get(LS_SETTINGS_TS),
       // Optimistically restore the signed-in account so the avatar paints
       // immediately instead of flashing the signed-out state until Firebase
@@ -221,7 +218,6 @@ class Store {
     if (Array.isArray(n)) this.notes = n;
     if (Array.isArray(c)) this.noteCats = c;
     if (t && typeof t === 'object') this.tombstones = { e: t.e || {}, n: t.n || {}, c: t.c || {} };
-    if (Array.isArray(ps)) this.pushSubs = ps;
     this._settingsTs = Number(ts) || 0;
     if (!this._settingsTs && s && !settingsAreUntouched(this.settings)) this._settingsTs = TS_UNDATED;
     if (u && u.uid) this.user = u;
@@ -239,7 +235,6 @@ class Store {
         storage.setJSON(LS_NOTES, this.notes),
         storage.setJSON(LS_CATS, this.noteCats),
         storage.setJSON(LS_TOMB, this.tombstones),
-        storage.setJSON(LS_PUSH, this.pushSubs),
         storage.set(LS_SETTINGS_TS, String(this._settingsTs || 0)),
       ]))
       .catch((err) => { console.warn('local save failed:', err); });
@@ -303,8 +298,6 @@ class Store {
       this.entries = mergeCollection(this.entries, d.entries, this.tombstones.e);
       this.notes = mergeCollection(this.notes, d.notes, this.tombstones.n);
       this.noteCats = mergeCollection(this.noteCats, d.noteCats, this.tombstones.c);
-      // push subscriptions: union across devices by endpoint
-      { const m = new Map(); [...(Array.isArray(d.pushSubs) ? d.pushSubs : []), ...this.pushSubs].forEach((s) => { if (s && s.endpoint) m.set(s.endpoint, s); }); this.pushSubs = [...m.values()]; }
       // settings: last-write-wins by timestamp
       const rts = Number(d.settingsTs) || 0;
       if (d.settings) {
@@ -351,7 +344,6 @@ class Store {
         notes: this.notes,
         noteCats: this.noteCats,
         tombstones: this.tombstones,
-        pushSubs: this.pushSubs,
         settingsTs: this._settingsTs || 0,
         updatedAt: Date.now(),
       });
@@ -536,17 +528,6 @@ class Store {
       notes: this.notes.length - before.notes,
       noteCats: this.noteCats.length - before.noteCats,
     };
-  }
-
-  // ---- web-push subscriptions (for background reminders) ----
-  addPushSub(sub) {
-    if (!sub || !sub.endpoint) return;
-    if (!this.pushSubs.some((s) => s.endpoint === sub.endpoint)) { this.pushSubs.push(sub); this._persist(); this._emit(); }
-  }
-  removePushSub(endpoint) {
-    const n = this.pushSubs.length;
-    this.pushSubs = this.pushSubs.filter((s) => s.endpoint !== endpoint);
-    if (this.pushSubs.length !== n) { this._persist(); this._emit(); }
   }
 
   // ---- notes ----

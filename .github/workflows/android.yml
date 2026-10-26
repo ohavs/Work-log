@@ -12,7 +12,6 @@ on:
     paths-ignore:
       - 'README.md'
       - 'design-system/**'
-      - 'cloudflare/**'
   workflow_dispatch:
 
 permissions:

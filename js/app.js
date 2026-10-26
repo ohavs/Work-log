@@ -1,5 +1,4 @@
 import { store, STORAGE_KEYS } from './store.js';
-import { VAPID_PUBLIC_KEY } from './config.js';
 import { exportPDF } from './pdf.js';
 import { exportCSV } from './csv.js';
 import { initIcons, svg } from './icons.js';
@@ -16,7 +15,7 @@ import {
   setStatusBarTheme, nativeStorageDriver, notificationPermission,
   syncScheduledNotifications, cancelAllScheduled, cancelScheduled, launchUrl, onLaunchUrl,
 } from './platform.js';
-import { plan, idFor, shiftAlarmIds } from './reminders.js';
+import { plan, dueNotes, idFor, shiftAlarmIds } from './reminders.js';
 import {
   MONTHS, DOW, DOW_SHORT, TYPE_META, parseDate, toISO, todayISO,
   workedMinutes, fmtHours, decimalHours, fmtMoney, inMonth,
@@ -1291,8 +1290,9 @@ function submitSettings(ev) {
 // ------------------------------------------------------------------ daily reminder
 // A local reminder: while the app is open, once the reminder time has passed and
 // no hours were logged today, show an in-app banner (always) and a system
-// notification (if permission was granted). No backend / push — works when the
-// app is open in the foreground.
+// notification (if permission was granted). No backend — works when the app is
+// open in the foreground. On Android the same reminder is also held by the
+// system as an alarm, so it arrives with the app closed; see rescheduleNative().
 function reminderDue() {
   const s = store.settings;
   if (!s.reminder) return false;
@@ -1318,19 +1318,38 @@ function refreshReminder() {
     showLocalNotification('שעון עבודה', 'עוד לא רשמת שעות היום — הקש כדי להזין');
   }
 }
+// ---- note reminders on the web ----
+// Android holds these as alarms; a browser can't, so while a tab is open the
+// loop below checks each minute whether a note's reminder came due since the
+// last check, and shows it then. Keys already shown are remembered so a
+// re-check — or a second tick within the same minute — can't repeat one.
+let lastNoteCheck = 0;
+const notesNotified = new Set();
+function refreshNoteReminders() {
+  if (isNative()) return;
+  const now = Date.now();
+  const since = lastNoteCheck;
+  lastNoteCheck = now;
+  if (!since) return; // first tick only establishes the window
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  for (const n of dueNotes({ notes: store.notes, after: since, until: now })) {
+    if (notesNotified.has(n.key)) continue;
+    notesNotified.add(n.key);
+    showLocalNotification(n.title, n.body, `wl-note-${n.id}`);
+  }
+}
+
 function startReminderLoop() {
-  refreshReminder();
-  setInterval(refreshReminder, 60000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshReminder(); });
+  const tick = () => { refreshReminder(); refreshNoteReminders(); };
+  tick();
+  setInterval(tick, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
   if (isNative()) {
-    // Nothing needs to be running for these to arrive, so there's no loop to
-    // keep and no push subscription to maintain.
+    // Nothing needs to be running for these to arrive: the system holds the
+    // alarms, so they fire with the app closed and the phone offline.
     rescheduleNative();
     document.addEventListener('visibilitychange', () => { if (!document.hidden) rescheduleNative(); });
-    return;
   }
-  // keep this device's push subscription fresh & stored whenever reminders are on
-  if (store.settings.reminder && 'Notification' in window && Notification.permission === 'granted') subscribePush();
 }
 
 // ---- native scheduling ----
@@ -1386,38 +1405,20 @@ function flushReschedule() {
 async function requestNotifyPermission() {
   return notificationPermission();
 }
-// ---- web push: subscribe this device so reminders arrive when the app is closed ----
-function urlB64ToUint8Array(base64) {
-  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
-  const raw = atob(b64), arr = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
-  return arr;
-}
-async function subscribePush() {
+// Browsers that used the old push sender still hold a subscription to a key
+// nothing signs with any more. Nothing would ever arrive through it, so it's
+// handed back once, quietly, the first time such a browser opens the app.
+async function dropStalePushSubscription() {
   try {
-    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !VAPID_PUBLIC_KEY) return false;
-    const reg = await navigator.serviceWorker.ready;
-    let sub = await reg.pushManager.getSubscription();
-    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY) });
-    store.addPushSub(sub.toJSON());
-    const tz = -new Date().getTimezoneOffset(); // minutes east of UTC → server sends at local time
-    if (store.settings.tz !== tz) store.saveSettings({ tz });
-    return true;
-  } catch (e) { console.warn('push subscribe failed', e); return false; }
-}
-async function unsubscribePush() {
-  try {
-    if (!('serviceWorker' in navigator)) return;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
     const reg = await navigator.serviceWorker.ready;
     const sub = await reg.pushManager.getSubscription();
-    if (sub) { store.removePushSub(sub.endpoint); await sub.unsubscribe().catch(() => {}); }
+    if (sub) await sub.unsubscribe().catch(() => {});
   } catch (_) {}
 }
-// Queues an immediate background push so the user can close the app and
-// confirm notifications arrive. Fires on the next server run (bypasses the
-// reminder-time and already-logged checks). No time picker — that only created
-// a race where the workflow ran before the chosen time.
+// Shows a notification the user can see straight away, to confirm the
+// permission really took. On Android it's scheduled a few seconds out so it
+// can be watched with the app closed — that's the case worth proving there.
 async function sendTestReminder() {
   const perm = await requestNotifyPermission();
   if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
@@ -1434,22 +1435,19 @@ async function sendTestReminder() {
     toast('סגור את האפליקציה — ההתראה תגיע בעוד כ-12 שניות');
     return;
   }
-  const ok = await subscribePush();
-  if (!ok) { toast('לא ניתן לרשום את המכשיר להתראות'); return; }
-  store.saveSettings({ pushTestAt: Date.now() });
-  toast('בקשת בדיקה נרשמה ✓ — סגור את האפליקציה, וההתראה תגיע תוך כדקה');
+  const shown = await showLocalNotification('בדיקת התראה ✓', 'ההתראות עובדות כל עוד האפליקציה פתוחה או ברקע', 'wl-test');
+  toast(shown ? 'נשלחה התראת בדיקה ✓' : 'לא ניתן להציג התראה במכשיר הזה');
 }
 async function enableReminderFlow() {
   const perm = await requestNotifyPermission();
   if (perm === 'granted' && isNative()) {
-    // No push subscription and no server: the reminders are alarms the system
-    // already holds, so they arrive with the app closed and no network.
+    // The reminders are alarms the system already holds, so they arrive with
+    // the app closed and no network.
     rescheduleNative({ immediate: true });
     await showLocalNotification('התזכורות פעילות ✓', 'התזכורות יגיעו גם כשהאפליקציה סגורה', 'wl-test');
     toast('התזכורות הופעלו — שלחנו התראת בדיקה');
   } else if (perm === 'granted') {
-    const pushed = await subscribePush(); // background delivery when app is closed
-    const shown = await showLocalNotification('התזכורות פעילות ✓', pushed ? 'נשלח לך תזכורת יומית גם כשהאפליקציה סגורה' : 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
+    const shown = await showLocalNotification('התזכורות פעילות ✓', 'נשלח לך תזכורת יומית בשעה שבחרת', 'wl-test');
     toast(shown ? 'התזכורות הופעלו — שלחנו התראת בדיקה' : 'התזכורת הופעלה');
   } else if (perm === 'denied') {
     toast('ההתראות חסומות — יש לאפשר אותן בהגדרות הדפדפן/המכשיר');
@@ -2120,7 +2118,6 @@ async function setNoteRemindMode(mode) {
   if (mode === 'none') { noteDraft.remind = null; renderNoteRemind(); return; }
   const perm = await requestNotifyPermission();
   if (perm !== 'granted') { toast(perm === 'denied' ? 'ההתראות חסומות — יש לאפשר אותן בהגדרות המכשיר' : 'צריך לאשר התראות תחילה'); return; }
-  subscribePush(); // register this device so the reminder can be delivered
   noteDraft.remind = mode === 'once' ? { mode: 'once', at: null } : { mode: 'weekly', days: [], time: '18:00' };
   renderNoteRemind();
 }
@@ -2507,8 +2504,9 @@ function bind() {
     $('reminderTimeField').hidden = !on;
     if (on) { enableReminderFlow(); return; }
     // Turning them off has to take back what the system is already holding;
-    // an alarm doesn't consult the app before firing.
-    if (isNative()) cancelAllScheduled().then(() => { lastPlanKey = ''; }); else unsubscribePush();
+    // an alarm doesn't consult the app before firing. On the web nothing is
+    // held anywhere — the loop simply stops finding the reminder due.
+    if (isNative()) cancelAllScheduled().then(() => { lastPlanKey = ''; });
   });
   // כפתור בדיקת התראה מוסתר מה-UI (הקוד נשמר); מקשרים רק אם הוא קיים.
   { const b = $('testReminderBtn'); if (b) b.onclick = sendTestReminder; }
@@ -2778,7 +2776,7 @@ async function main() {
   initBackHandling();
   // No service worker in the native shell — the assets ship inside the APK,
   // so a network-first cache in front of them can only get in the way.
-  if (!isNative() && 'serviceWorker' in navigator) initUpdateChecking();
+  if (!isNative() && 'serviceWorker' in navigator) { initUpdateChecking(); dropStalePushSubscription(); }
   initNativeShell({ dark: store.settings.theme === 'dark' });
   // After the first render and after the data is loaded: a shortcut that
   // clocks in has to act on the real open-shift state, not an empty one.
