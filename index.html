@@ -76,43 +76,22 @@
 
       <div class="job-filter" id="jobFilterR" hidden></div>
 
-      <section class="summary-card">
-        <div class="goal-rings" id="goalRings" hidden></div>
+      <!-- One card for the whole month: the three numbers that matter on
+           top, and everything else behind tabs instead of a stack of
+           separate collapsible cards. The chosen tab is remembered. -->
+      <section class="report-card" id="reportCard">
         <div class="stat-row">
           <div class="stat"><span class="stat-value" id="statHours">0</span><span class="stat-label">שעות</span></div>
-          <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימים</span></div>
+          <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימי עבודה</span></div>
           <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
         </div>
-        <div class="off-pills" id="offPills" hidden></div>
+        <div class="rc-tabs" id="reportTabs" role="tablist">
+          <button type="button" role="tab" data-tab="overview">סיכום</button>
+          <button type="button" role="tab" data-tab="weeks">שבועות</button>
+          <button type="button" role="tab" data-tab="absence">חופשה ומחלה</button>
+        </div>
+        <div class="rc-body" id="reportBody"></div>
       </section>
-
-      <div class="weekly" id="weeklyCard" hidden>
-        <button type="button" class="weekly-head" id="weeklyToggle" aria-expanded="false">
-          <span class="weekly-title">סיכום שבועי</span>
-          <span class="chev" id="weeklyChev"></span>
-        </button>
-        <div class="weekly-body" id="weeklyBody" hidden></div>
-      </div>
-
-      <div class="weekly" id="monthlyCard" hidden>
-        <button type="button" class="weekly-head" id="monthlyToggle" aria-expanded="false">
-          <span class="weekly-title">דוח חודשי</span>
-          <span class="chev" id="monthlyChev"></span>
-        </button>
-        <div class="weekly-body" id="monthlyBody" hidden></div>
-      </div>
-
-      <!-- Absences live here rather than on the "עוד" page: one tap from the
-           home screen, alongside the month they belong to, without taking
-           space on the front. -->
-      <div class="weekly" id="absenceCard" hidden>
-        <button type="button" class="weekly-head" id="absenceToggle" aria-expanded="false">
-          <span class="weekly-title">חופשה ומחלה</span>
-          <span class="weekly-sub" id="absenceSummary"></span>
-          <span class="chev" id="absenceChev"></span>
-        </button>
-        <div class="weekly-body" id="absenceBody" hidden></div>
-      </div>
 
       <div class="list-head">
         <h2>רישומים <span class="list-count" id="listCount"></span></h2>
@@ -183,9 +162,9 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <button class="text-btn danger" id="deleteEntry" hidden>מחיקה</button>
+        <button type="button" class="text-btn" id="closeSheet">ביטול</button>
         <h3 id="sheetTitle">רישום חדש</h3>
-        <button class="text-btn" id="closeSheet">ביטול</button>
+        <button type="submit" form="entryForm" class="head-save" id="saveEntry">שמירה</button>
       </div>
 
       <form id="entryForm" class="form" autocomplete="off">
@@ -234,6 +213,16 @@
             <p class="form-note" id="fBreakNote" hidden>במשמרת של 6 שעות ומעלה מוצעת הפסקה אוטומטית · ניתן לשנות בהגדרות</p>
           </div>
 
+          <div class="field">
+            <span class="field-label">אחוז שכר</span>
+            <div class="chips" id="payPctChips">
+              <button type="button" data-pct="100">רגיל · 100%</button>
+              <button type="button" data-pct="200">200%</button>
+            </div>
+            <input type="hidden" id="fPayPct" value="100" />
+            <p class="form-note" id="fPayPctNote" hidden>משמרת בשכר כפול — למשל עבודה ביום בחירות. כל שעה בה משולמת פי 2.</p>
+          </div>
+
           <div class="calc-preview" id="calcPreview">
             <span id="calcHours">0 שעות</span>
             <span id="calcPay"></span>
@@ -258,150 +247,173 @@
           </div>
         </div>
 
-        <button type="submit" class="btn accent big" id="saveEntry">שמירה</button>
+        <button type="button" class="btn danger-line" id="deleteEntry" hidden><span data-ic="trash"></span> מחיקת הרישום</button>
       </form>
     </div>
   </div>
 
   <!-- ============ Settings sheet ============ -->
+  <!-- Grouped by what belongs together, each group folding closed. Which
+       groups are open is remembered on this device, so the sheet opens the
+       way it was left. -->
   <div class="sheet-backdrop" id="settingsSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <span class="ghost-spacer"></span>
+        <button type="button" class="text-btn" id="closeSettings">סגירה</button>
         <h3 id="setTitle">הגדרות</h3>
-        <button class="text-btn" id="closeSettings">סגירה</button>
+        <button type="submit" form="settingsForm" class="head-save">שמירה</button>
       </div>
 
-      <form id="settingsForm" class="form" autocomplete="off">
-        <div class="field">
-          <span class="field-label">ערכת צבעים</span>
-          <div class="palette-row" id="paletteRow"></div>
-        </div>
-
-        <div class="field">
-          <span class="field-label">השם שלי <em>(לדוח)</em></span>
-          <input type="text" id="sName" maxlength="40" placeholder="לא חובה" />
-        </div>
-        <div class="field">
-          <span class="field-label">שכר לשעה</span>
-          <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="any" inputmode="decimal" value="0" /></div>
-        </div>
-        <div class="field">
-          <span class="field-label">יעד שעות <em>(למד ההתקדמות בדוחות)</em></span>
-          <div class="time-grid">
-            <div class="input-wrap"><input type="number" id="sGoalWeek" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / שבוע</span></div>
-            <div class="input-wrap"><input type="number" id="sGoal" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ / חודש</span></div>
+      <form id="settingsForm" class="form set-form" autocomplete="off">
+        <!-- account: always visible, it's what the avatar button is about -->
+        <div class="acct-card">
+          <span class="acct-avatar" id="acctAvatar"></span>
+          <div class="acct-text">
+            <b class="acct-name" id="acctName">שמירה במכשיר</b>
+            <span class="sync-status" id="syncStatus">מצב שמירה: מקומי במכשיר</span>
           </div>
+          <button type="button" class="acct-btn" id="authBtn" hidden>התחברות</button>
         </div>
 
-        <div class="field">
-          <span class="field-label">קיזוז הפסקה אוטומטי</span>
-          <div class="stepper-row">
-            <span class="stepper-label">במשמרת של 6 שעות ומעלה</span>
-            <div class="stepper" data-target="sAutoBreak" data-min="0" data-max="120">
-              <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות דקות">−</button>
-              <span class="stepper-val"><b id="sAutoBreakVal">24</b> דק׳</span>
-              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר דקות">+</button>
+        <details class="set-group" data-group="pay">
+          <summary><span class="sg-ic" data-ic="wallet"></span><span class="sg-text"><b>שכר ומקומות עבודה</b><small>שכר לשעה · מקומות עבודה · שם לדוח</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <div class="field">
+              <span class="field-label">שכר לשעה</span>
+              <div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="sRate" min="0" step="any" inputmode="decimal" value="0" /></div>
+            </div>
+            <div class="field">
+              <span class="field-label">מקומות עבודה <em>(שכר לכל אחד)</em></span>
+              <div class="jobs-list" id="jobsList"></div>
+              <button type="button" class="btn ghost-line" id="addJobBtn">+ הוספת מקום עבודה</button>
+            </div>
+            <div class="field">
+              <span class="field-label">השם שלי <em>(מופיע בדוח)</em></span>
+              <input type="text" id="sName" maxlength="40" placeholder="לא חובה" />
             </div>
           </div>
-          <input type="hidden" id="sAutoBreak" value="24" />
-          <p class="form-note">הפסקה מוצעת אוטומטית ומקוזזת משעות העבודה במשמרות ארוכות · ניתן לשנות לכל רישום בנפרד</p>
-        </div>
+        </details>
 
-        <div class="field">
-          <span class="field-label">מקומות עבודה <em>(שכר לכל אחד)</em></span>
-          <div class="jobs-list" id="jobsList"></div>
-          <button type="button" class="btn ghost-line" id="addJobBtn">+ הוספת מקום עבודה</button>
-        </div>
-
-        <label class="switch-field">
-          <span>מצב כהה</span>
-          <span class="switch"><input type="checkbox" id="sDark" /><span class="knob"></span></span>
-        </label>
-
-        <label class="switch-field">
-          <span>תזכורת יומית להזין שעות</span>
-          <span class="switch"><input type="checkbox" id="sReminder" /><span class="knob"></span></span>
-        </label>
-        <div class="field" id="reminderTimeField" hidden>
-          <span class="field-label">שעת התזכורת</span>
-          <button type="button" class="picker-field" id="sReminderTime"><span class="pf-ic" data-ic="clock"></span><span id="sReminderTimeText">18:00</span></button>
-          <p class="form-note">התראה תישלח בשעה שנבחרה אם עדיין לא נרשמו שעות. באפליקציית האנדרואיד ההתראה מגיעה גם כשהאפליקציה סגורה; בדפדפן — רק כשהיא פתוחה.</p>
-          <!-- כפתור בדיקת התראה — הוסתר מה-UI לאחר שאומת שהמערכת עובדת. הקוד נשמר; להחזרה, בטל את ההערה כאן (וב-app.js binding של testReminderBtn).
-          <button type="button" class="btn ghost-line" id="testReminderBtn"><span data-ic="bell"></span> שליחת התראת בדיקה</button>
-          -->
-          <span class="field-label sub-label">ימים ללא עבודה</span>
-          <div class="chips" id="offDaysChips">
-            <button type="button" data-day="0">א׳</button>
-            <button type="button" data-day="1">ב׳</button>
-            <button type="button" data-day="2">ג׳</button>
-            <button type="button" data-day="3">ד׳</button>
-            <button type="button" data-day="4">ה׳</button>
-            <button type="button" data-day="5">ו׳</button>
-            <button type="button" data-day="6">ש׳</button>
-          </div>
-          <p class="form-note">לא תישלח תזכורת יומית בימים שסומנו — גם אם לא נרשמו בהם שעות.</p>
-        </div>
-
-        <div class="field">
-          <span class="field-label">שכחתי לצאת <em>(משמרת פתוחה זמן רב)</em></span>
-
-          <div class="stepper-row">
-            <span class="stepper-label">תזכורת שעדיין במשמרת</span>
-            <div class="stepper" data-target="sShiftRemind" data-min="1" data-max="23">
-              <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
-              <span class="stepper-val"><b id="sShiftRemindVal">9</b> ש׳</span>
-              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+        <details class="set-group" data-group="week">
+          <summary><span class="sg-ic" data-ic="target"></span><span class="sg-text"><b>יעדים ושבוע עבודה</b><small>יעד שעות · ימים ללא עבודה · הפסקה</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <div class="field">
+              <span class="field-label">יעד שעות</span>
+              <div class="time-grid">
+                <div class="input-wrap"><input type="number" id="sGoalWeek" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ בשבוע</span></div>
+                <div class="input-wrap"><input type="number" id="sGoal" min="0" step="any" inputmode="numeric" value="0" placeholder="0" /><span class="input-suffix">ש׳ בחודש</span></div>
+              </div>
+            </div>
+            <div class="field">
+              <span class="field-label">ימים ללא עבודה</span>
+              <div class="chips" id="offDaysChips">
+                <button type="button" data-day="0">א׳</button>
+                <button type="button" data-day="1">ב׳</button>
+                <button type="button" data-day="2">ג׳</button>
+                <button type="button" data-day="3">ד׳</button>
+                <button type="button" data-day="4">ה׳</button>
+                <button type="button" data-day="5">ו׳</button>
+                <button type="button" data-day="6">ש׳</button>
+              </div>
+              <p class="form-note">לא נחשבים ביעד השבועי, מדולגים בסימון חופשה, ולא תישלח בהם תזכורת.</p>
+            </div>
+            <div class="field">
+              <span class="field-label">קיזוז הפסקה אוטומטי</span>
+              <div class="stepper-row">
+                <span class="stepper-label">במשמרת של 6 שעות ומעלה</span>
+                <div class="stepper" data-target="sAutoBreak" data-min="0" data-max="120">
+                  <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות דקות">−</button>
+                  <span class="stepper-val"><b id="sAutoBreakVal">24</b> דק׳</span>
+                  <button type="button" class="stepper-btn" data-step="1" aria-label="יותר דקות">+</button>
+                </div>
+              </div>
+              <input type="hidden" id="sAutoBreak" value="24" />
+              <p class="form-note">ניתן לשנות לכל רישום בנפרד.</p>
             </div>
           </div>
-          <div class="stepper-row">
-            <span class="stepper-label">סגירה אוטומטית של המשמרת</span>
-            <div class="stepper" data-target="sShiftMax" data-min="2" data-max="24">
-              <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
-              <span class="stepper-val"><b id="sShiftMaxVal">12</b> ש׳</span>
-              <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+        </details>
+
+        <details class="set-group" data-group="remind">
+          <summary><span class="sg-ic" data-ic="bell"></span><span class="sg-text"><b>תזכורות</b><small>תזכורת יומית · שכחתי לצאת</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <label class="switch-field">
+              <span>תזכורת יומית להזין שעות</span>
+              <span class="switch"><input type="checkbox" id="sReminder" /><span class="knob"></span></span>
+            </label>
+            <div class="field" id="reminderTimeField" hidden>
+              <span class="field-label">שעת התזכורת</span>
+              <button type="button" class="picker-field" id="sReminderTime"><span class="pf-ic" data-ic="clock"></span><span id="sReminderTimeText">18:00</span></button>
+              <p class="form-note">נשלחת רק אם עוד לא נרשמו שעות. באנדרואיד מגיעה גם כשהאפליקציה סגורה; בדפדפן — רק כשהיא פתוחה.</p>
+              <!-- כפתור בדיקת התראה — הוסתר מה-UI לאחר שאומת שהמערכת עובדת. הקוד נשמר; להחזרה, בטל את ההערה כאן (וב-app.js binding של testReminderBtn).
+              <button type="button" class="btn ghost-line" id="testReminderBtn"><span data-ic="bell"></span> שליחת התראת בדיקה</button>
+              -->
+            </div>
+            <div class="field">
+              <span class="field-label">שכחתי לצאת</span>
+              <div class="stepper-row">
+                <span class="stepper-label">תזכורת שעדיין במשמרת</span>
+                <div class="stepper" data-target="sShiftRemind" data-min="1" data-max="23">
+                  <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
+                  <span class="stepper-val"><b id="sShiftRemindVal">9</b> ש׳</span>
+                  <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+                </div>
+              </div>
+              <div class="stepper-row">
+                <span class="stepper-label">סגירה אוטומטית של המשמרת</span>
+                <div class="stepper" data-target="sShiftMax" data-min="2" data-max="24">
+                  <button type="button" class="stepper-btn" data-step="-1" aria-label="פחות שעות">−</button>
+                  <span class="stepper-val"><b id="sShiftMaxVal">12</b> ש׳</span>
+                  <button type="button" class="stepper-btn" data-step="1" aria-label="יותר שעות">+</button>
+                </div>
+              </div>
+              <input type="hidden" id="sShiftRemind" value="9" />
+              <input type="hidden" id="sShiftMax" value="12" />
+              <p class="form-note">אם נשארת “בכניסה” — תזכורת אחרי מספר השעות הראשון, וסגירה אוטומטית אחרי השני.</p>
             </div>
           </div>
-          <input type="hidden" id="sShiftRemind" value="9" />
-          <input type="hidden" id="sShiftMax" value="12" />
-          <p class="form-note">אם נשארת “בכניסה” — נשלח תזכורת אחרי מספר השעות הראשון, והמשמרת תיסגר אוטומטית אחרי השני (ותוגבל לאותו משך).</p>
-        </div>
+        </details>
 
-        <div class="sync-box">
-          <div class="sync-status" id="syncStatus">מצב שמירה: מקומי במכשיר</div>
-          <button type="button" class="btn ghost-line" id="authBtn" hidden>התחברות לחשבון Google</button>
-        </div>
-
-        <div class="field">
-          <span class="field-label">גיבוי נתונים <em>(קובץ)</em></span>
-          <div class="backup-row">
-            <button type="button" class="btn ghost-line" id="backupExport"><span data-ic="export"></span> ייצוא גיבוי</button>
-            <button type="button" class="btn ghost-line" id="backupImport"><span data-ic="restore"></span> שחזור מקובץ</button>
+        <details class="set-group" data-group="look">
+          <summary><span class="sg-ic" data-ic="palette"></span><span class="sg-text"><b>מראה</b><small>ערכת צבעים</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <div class="palette-row" id="paletteRow"></div>
+            <p class="form-note">מצב כהה/בהיר — בכפתור שבראש המסך.</p>
           </div>
-          <input type="file" id="backupFile" accept="application/json,.json" hidden />
-          <p class="form-note">קובץ אחד עם כל הנתונים — רישומים, פתקים, קטגוריות, מקומות עבודה והגדרות. השחזור <b>ממזג</b> עם מה שקיים במכשיר ולא מוחק כלום.</p>
-        </div>
+        </details>
 
-        <!-- Updates without leaving the app. Shown only in the Android
-             build; on the web the browser and the service worker already do
-             this, so there'd be nothing for the button to do. -->
-        <div class="field" id="updateField" hidden>
-          <span class="field-label">עדכוני אפליקציה</span>
-          <div class="update-box">
-            <p class="update-state" id="updateState">—</p>
-            <div class="update-bar" id="updateBar" hidden><span class="update-bar-fill" id="updateBarFill"></span></div>
-            <button type="button" class="btn ghost-line" id="updateCheckBtn"><span data-ic="refresh"></span> בדיקת עדכון</button>
-            <button type="button" class="btn accent" id="updateInstallBtn" hidden><span data-ic="restore"></span> הורדה והתקנה</button>
+        <details class="set-group" data-group="data">
+          <summary><span class="sg-ic" data-ic="database"></span><span class="sg-text"><b>גיבוי ועדכונים</b><small id="sgDataSub">גיבוי לקובץ · שחזור</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <div class="field">
+              <span class="field-label">גיבוי נתונים <em>(קובץ)</em></span>
+              <div class="backup-row">
+                <button type="button" class="btn ghost-line" id="backupExport"><span data-ic="export"></span> ייצוא גיבוי</button>
+                <button type="button" class="btn ghost-line" id="backupImport"><span data-ic="restore"></span> שחזור מקובץ</button>
+              </div>
+              <input type="file" id="backupFile" accept="application/json,.json" hidden />
+              <p class="form-note">קובץ אחד עם כל הנתונים. השחזור <b>ממזג</b> עם מה שקיים במכשיר ולא מוחק כלום.</p>
+            </div>
+
+            <!-- Updates without leaving the app. Shown only in the Android
+                 build; on the web the browser and the service worker already
+                 do this, so there'd be nothing for the button to do. -->
+            <div class="field" id="updateField" hidden>
+              <span class="field-label">עדכוני אפליקציה</span>
+              <div class="update-box">
+                <p class="update-state" id="updateState">—</p>
+                <div class="update-bar" id="updateBar" hidden><span class="update-bar-fill" id="updateBarFill"></span></div>
+                <button type="button" class="btn ghost-line" id="updateCheckBtn"><span data-ic="refresh"></span> בדיקת עדכון</button>
+                <button type="button" class="btn accent" id="updateInstallBtn" hidden><span data-ic="restore"></span> הורדה והתקנה</button>
+              </div>
+              <p class="form-note">העדכון מותקן מעל האפליקציה הקיימת ושומר על כל הנתונים. בפעם הראשונה אנדרואיד יבקש אישור חד-פעמי להתקנת עדכונים מהאפליקציה.</p>
+            </div>
           </div>
-          <p class="form-note">העדכון מותקן מעל האפליקציה הקיימת ושומר על כל הנתונים. בפעם הראשונה אנדרואיד יבקש אישור חד-פעמי להתקנת עדכונים מהאפליקציה.</p>
-        </div>
+        </details>
 
         <!-- Lets us confirm exactly which build is actually running on a
              device, instead of guessing whether an update really landed. -->
         <p class="app-version" id="appVersion"></p>
-
-        <button type="submit" class="btn accent big">שמירה</button>
       </form>
     </div>
   </div>
@@ -411,9 +423,9 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="nvTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <button class="text-btn" id="nvEdit">עריכה</button>
+        <button type="button" class="text-btn" id="nvClose">סגירה</button>
         <span class="nv-cat" id="nvCat"></span>
-        <button class="text-btn" id="nvClose">סגירה</button>
+        <button type="button" class="head-save ghost" id="nvEdit">עריכה</button>
       </div>
       <div class="note-view" id="noteViewBody"></div>
     </div>
@@ -424,9 +436,9 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="noteSheetTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <button class="text-btn danger" id="deleteNote" hidden>מחיקה</button>
+        <button type="button" class="text-btn" id="closeNote">ביטול</button>
         <h3 id="noteSheetTitle">פתק חדש</h3>
-        <button class="text-btn" id="closeNote">ביטול</button>
+        <button type="submit" form="noteForm" class="head-save">שמירה</button>
       </div>
       <form id="noteForm" class="form" autocomplete="off">
         <div class="field big"><input type="text" id="nTitle" maxlength="80" placeholder="כותרת" /></div>
@@ -492,7 +504,7 @@
           <span class="switch"><input type="checkbox" id="nPin" /><span class="knob"></span></span>
         </label>
 
-        <button type="submit" class="btn accent big">שמירה</button>
+        <button type="button" class="btn danger-line" id="deleteNote" hidden><span data-ic="trash"></span> מחיקת הפתק</button>
       </form>
     </div>
   </div>
@@ -502,9 +514,9 @@
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <span class="ghost-spacer"></span>
+        <button type="button" class="text-btn" id="closeCatManage">סגירה</button>
         <h3>קטגוריות</h3>
-        <button class="text-btn" id="closeCatManage">סגירה</button>
+        <span class="ghost-spacer"></span>
       </div>
       <div class="cat-manage-list" id="catManageList"></div>
       <button type="button" class="btn ghost-line" id="addCatBtn">+ קטגוריה חדשה</button>
@@ -516,14 +528,14 @@
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <button class="text-btn danger" id="deleteCat" hidden>מחיקה</button>
+        <button type="button" class="text-btn" id="closeCat">ביטול</button>
         <h3 id="catSheetTitle">קטגוריה</h3>
-        <button class="text-btn" id="closeCat">ביטול</button>
+        <button type="submit" form="catForm" class="head-save">שמירה</button>
       </div>
       <form id="catForm" class="form">
         <div class="field big"><input type="text" id="cName" maxlength="24" placeholder="שם הקטגוריה" required /></div>
         <div class="field"><span class="field-label">צבע</span><div class="swatches" id="cSwatches"></div></div>
-        <button type="submit" class="btn accent big">שמירה</button>
+        <button type="button" class="btn danger-line" id="deleteCat" hidden><span data-ic="trash"></span> מחיקת הקטגוריה</button>
       </form>
     </div>
   </div>
@@ -533,14 +545,14 @@
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <button class="text-btn danger" id="deleteJob" hidden>מחיקה</button>
+        <button type="button" class="text-btn" id="closeJob">ביטול</button>
         <h3 id="jobSheetTitle">מקום עבודה</h3>
-        <button class="text-btn" id="closeJob">ביטול</button>
+        <button type="submit" form="jobForm" class="head-save">שמירה</button>
       </div>
       <form id="jobForm" class="form">
         <div class="field big"><span class="field-label">שם המקום</span><input type="text" id="jName" maxlength="30" placeholder="למשל: מסעדה, משמרות, פרויקט" required /></div>
         <div class="field"><span class="field-label">שכר לשעה</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="jRate" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
-        <button type="submit" class="btn accent big">שמירה</button>
+        <button type="button" class="btn danger-line" id="deleteJob" hidden><span data-ic="trash"></span> מחיקת המקום</button>
       </form>
     </div>
   </div>
@@ -550,9 +562,9 @@
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="payTitle">
       <div class="sheet-handle"></div>
       <div class="sheet-head">
-        <span class="ghost-spacer"></span>
-        <h3 id="payTitle">הגדרות שכר ומיסים</h3>
-        <button class="text-btn" id="closePayroll">סגירה</button>
+        <button type="button" class="text-btn" id="closePayroll">סגירה</button>
+        <h3 id="payTitle">שכר ומיסים</h3>
+        <button type="submit" form="payrollForm" class="head-save">שמירה</button>
       </div>
       <form id="payrollForm" class="form" autocomplete="off">
         <p class="form-note">כל הערכים אחוזים או סכומים שאפשר לשנות. החישובים הם הערכה בלבד.</p>
@@ -613,8 +625,6 @@
           <div class="field" id="pTravelMonthlyField" hidden><span class="field-label">סכום נסיעות חודשי קבוע</span><div class="input-wrap"><span class="input-prefix">₪</span><input type="number" id="pTravelMonth" min="0" step="any" inputmode="decimal" placeholder="0" /></div></div>
           <p class="form-note">מתווסף לשכר — בלי ניכויי מס/פנסיה. רק אחת מהאפשרויות פעילה בכל רגע.</p>
         </div>
-
-        <button type="submit" class="btn accent big">שמירה</button>
       </form>
     </div>
   </div>
@@ -623,7 +633,7 @@
   <div class="sheet-backdrop" id="exportSheet" hidden>
     <div class="sheet" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3>ייצוא נתונים</h3><button class="text-btn" id="closeExport">סגירה</button></div>
+      <div class="sheet-head"><button type="button" class="text-btn" id="closeExport">סגירה</button><h3>ייצוא נתונים</h3><span class="ghost-spacer"></span></div>
       <div class="action-list">
         <button type="button" class="action" id="doExportPdf"><span class="action-ic" data-ic="pdf"></span><span class="action-text"><b>ייצוא ל‑PDF</b><small>דוח מעוצב להדפסה או שמירה</small></span><span class="action-go" data-ic="chevStart"></span></button>
         <button type="button" class="action" id="doExportCsv"><span class="action-ic" data-ic="csv"></span><span class="action-text"><b>ייצוא ל‑CSV</b><small>קובץ לאקסל / Google Sheets</small></span><span class="action-go" data-ic="chevStart"></span></button>
@@ -637,7 +647,7 @@
       <div class="sheet-handle"></div>
       <!-- One sheet for both kinds of day off: same date, same day count, same
            skip-rest-days rule. Only the words and the entry type differ. -->
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3 id="vqTitle">סימון חופשה שנוצלה</h3><button class="text-btn" id="closeVacQuick">סגירה</button></div>
+      <div class="sheet-head"><button type="button" class="text-btn" id="closeVacQuick">סגירה</button><h3 id="vqTitle">סימון חופשה שנוצלה</h3><button type="submit" form="vacQuickForm" class="head-save" id="vqSubmit">הוספה</button></div>
       <form id="vacQuickForm" class="form">
         <div class="field">
           <span class="field-label">תאריך התחלה</span>
@@ -657,7 +667,6 @@
           <span class="switch"><input type="checkbox" id="vqSkipOff" checked /><span class="knob"></span></span>
         </label>
         <p class="form-note" id="vqPreview"></p>
-        <button type="submit" class="btn accent big" id="vqSubmit">הוספה</button>
       </form>
     </div>
   </div>
@@ -666,7 +675,7 @@
   <div class="sheet-backdrop" id="timePicker" hidden>
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3 id="timePickerTitle">בחירת שעה</h3><button class="text-btn" id="timeCancel">ביטול</button></div>
+      <div class="sheet-head"><button type="button" class="text-btn" id="timeCancel">ביטול</button><h3 id="timePickerTitle">בחירת שעה</h3><span class="ghost-spacer"></span></div>
       <div class="wheels">
         <div class="wheel" id="wheelH" tabindex="0" aria-label="שעה"></div>
         <span class="wheel-sep">:</span>
@@ -681,7 +690,7 @@
   <div class="sheet-backdrop" id="datePicker" hidden>
     <div class="sheet compact" role="dialog" aria-modal="true">
       <div class="sheet-handle"></div>
-      <div class="sheet-head"><span class="ghost-spacer"></span><h3 id="datePickerTitle">בחירת תאריך</h3><button class="text-btn" id="dateCancel">ביטול</button></div>
+      <div class="sheet-head"><button type="button" class="text-btn" id="dateCancel">ביטול</button><h3 id="datePickerTitle">בחירת תאריך</h3><span class="ghost-spacer"></span></div>
       <div class="cal-nav">
         <button class="nav-arrow sm" id="dpPrev" aria-label="חודש קודם"></button>
         <span class="cal-title" id="dpTitle"></span>

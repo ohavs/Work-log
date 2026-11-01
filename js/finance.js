@@ -32,6 +32,16 @@ export function payrollOf(settings) {
   return p;
 }
 
+// A shift's pay percentage — 100 for an ordinary shift, 200 for one paid
+// double (election day). Stored on the entry as payPct; anything missing or
+// invalid is an ordinary shift, so every entry recorded before this existed
+// keeps paying exactly what it did.
+export const PAY_PCTS = [100, 200];
+export function payFactor(e) {
+  const p = Number(e && e.payPct);
+  return p > 0 ? p / 100 : 1;
+}
+
 export function rateOf(e, settings) {
   if (e.rate != null && e.rate !== '') return Number(e.rate) || 0;
   if (e.jobId && Array.isArray(settings.jobs)) {
@@ -39,6 +49,13 @@ export function rateOf(e, settings) {
     if (j && j.rate !== '' && j.rate != null) return Number(j.rate) || 0;
   }
   return Number(settings.rate) || 0;
+}
+
+// What one work entry pays on its own: hours × its hourly rate × its pay
+// percentage. The single per-row figure the list, the tiles and both exports
+// show, so a 200% shift reads the same everywhere.
+export function entryPay(e, settings) {
+  return decimalHours(workedMinutes(e)) * rateOf(e, settings) * payFactor(e);
 }
 
 // --- overtime: split a single day's hours into 100% / 125% / 150% tiers ---
@@ -170,6 +187,10 @@ export function grossForMonth(entries, settings, y, m) {
   // month keeps counting into this one.
   const sick = sickMonth(entries, settings, y, m);
   let hours = 0, vacationDays = 0;
+  // The part of the pay that exists only because a shift was paid above
+  // 100% (e.g. 200% on election day) — kept apart so the report can say
+  // where the money came from instead of folding it into one number.
+  let premium = 0, premiumHours = 0;
   const sickGross = p.payMode === 'global' ? 0 : sick.pay;
   const dayHours = new Map();
   const dayPayFlat = new Map();
@@ -179,9 +200,11 @@ export function grossForMonth(entries, settings, y, m) {
       const h = decimalHours(workedMinutes(e));
       hours += h;
       dayHours.set(e.date, (dayHours.get(e.date) || 0) + h);
+      const r = rateOf(e, settings);
+      const f = payFactor(e);
+      if (f !== 1) { premium += h * r * (f - 1); premiumHours += h; }
       if (p.payMode !== 'global') {
-        const r = rateOf(e, settings);
-        dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r);
+        dayPayFlat.set(e.date, (dayPayFlat.get(e.date) || 0) + h * r * f);
       }
     } else if (entryType(e) === 'sick') {
       // The hours a sick day credits are reported in full — it's a day off
@@ -215,7 +238,10 @@ export function grossForMonth(entries, settings, y, m) {
     if (expected > 0 && coveredHours < expected && rate > 0) {
       gross = Math.max(0, base - (expected - coveredHours) * rate);
     }
-    return { gross, hours, ot125, ot150, sick };
+    // A fixed salary already covers the hours themselves; what a 200% day
+    // adds on top is the extra share, at the configured hourly rate.
+    gross += premium;
+    return { gross, hours, ot125, ot150, sick, premium, premiumHours };
   }
 
   let gross = sickGross;
@@ -229,7 +255,9 @@ export function grossForMonth(entries, settings, y, m) {
       gross += flatPay;
     }
   }
-  return { gross, hours, ot125, ot150, sick };
+  // With overtime on, the premium is folded into each day's average rate and
+  // multiplied by the tiers above; report the flat extra share either way.
+  return { gross, hours, ot125, ot150, sick, premium, premiumHours };
 }
 
 // Travel/commute reimbursement for a month — either a fixed ₪ amount per day

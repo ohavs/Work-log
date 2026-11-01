@@ -32,7 +32,7 @@
 // character-by-character for every mixed-content pattern this report uses
 // (dates, break-minutes, money-with-currency, free-text notes).
 import { MONTHS, DOW, TYPE_META, parseDate, workedMinutes, fmtHours, decimalHours, fmtMoney, entryType } from './util.js';
-import { payrollOf, rateOf, grossForMonth, travelForMonth } from './finance.js';
+import { payrollOf, rateOf, grossForMonth, travelForMonth, entryPay, payFactor } from './finance.js';
 import { saveFile } from './platform.js';
 
 const FONT_REGULAR_URL = './fonts/noto-sans-hebrew/pdf-hebrew-400.ttf';
@@ -101,7 +101,8 @@ function computeReportData({ entries, settings, year, month }) {
     }
     const mins = workedMinutes(e);
     const r = rateOf(e, settings);
-    const pay = decimalHours(mins) * r;
+    const pay = entryPay(e, settings);
+    const pct = payFactor(e) !== 1 ? `${Math.round(payFactor(e) * 100)}% · ` : '';
     totalMin += mins; days.add(e.date);
     return [
       { col: 0, span: 1, text: dateCell },
@@ -109,7 +110,7 @@ function computeReportData({ entries, settings, year, month }) {
       { col: 2, span: 1, text: e.breakMin ? e.breakMin + ' דק׳' : '—' },
       { col: 3, span: 1, text: fmtHours(mins) },
       { col: 4, span: 1, text: r ? fmtMoney(pay, cur) : '—' },
-      { col: 5, span: 1, text: (e.note || '').trim() },
+      { col: 5, span: 1, text: (pct + (e.note || '').trim()).replace(/ · $/, '') },
     ];
   });
 

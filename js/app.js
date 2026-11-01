@@ -6,6 +6,7 @@ import { initPickers, openTimePicker, openDatePicker, showConfirm, dismissTopOve
 import {
   DEFAULT_PAYROLL, payrollOf, payslip, pensionForMonth, grossForMonth,
   yearlyByMonth, averages, vacationBalance, recreationAnnual, rateOf, travelForMonth, sickMonth,
+  entryPay, payFactor,
 } from './finance.js';
 import { uid } from './util.js';
 import { storage, setStorageDriver, migrateStorage, localDriver } from './storage.js';
@@ -27,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v88';
+const APP_VERSION = 'v89';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -41,9 +42,6 @@ let viewYear = now.getFullYear();
 let viewMonth = now.getMonth();
 let editingId = null;
 let formType = 'work';
-let weeklyOpen = false;
-let monthlyOpen = false;
-let absenceOpen = false;
 let moreOpen = false;
 let jobFilter = null;       // null = all workplaces; else jobId
 let editingJobId = null;
@@ -102,7 +100,6 @@ function toggleTheme() {
   const dark = store.settings.theme !== 'dark';
   store.saveSettings({ theme: dark ? 'dark' : 'light' });
   applyTheme();
-  const chk = $('sDark'); if (chk) chk.checked = dark; // keep settings switch in sync if open
 }
 
 // ------------------------------------------------------------------ active session
@@ -115,9 +112,20 @@ function toggleTheme() {
 let activeShift = null;
 let autoCloseId = null;
 
+// How this device last left the screens: which report tab was showing and
+// which settings groups were open. Per device rather than synced — it's
+// about this screen, and a tap on a tab shouldn't be a cloud write.
+const UI_KEY = 'wl_ui';
+let uiPrefs = {};
+function setUiPref(key, value) {
+  uiPrefs = { ...uiPrefs, [key]: value };
+  Promise.resolve(storage.setJSON(UI_KEY, uiPrefs)).catch(() => {});
+}
+
 async function loadLocalUiState() {
   activeShift = await storage.getJSON(ACTIVE_KEY, null);
   autoCloseId = await storage.get(AUTOCLOSE_KEY);
+  try { const u = await storage.getJSON(UI_KEY, {}); uiPrefs = u && typeof u === 'object' ? u : {}; } catch { uiPrefs = {}; }
 }
 
 function getActive() { return activeShift; }
@@ -316,76 +324,12 @@ function effRate(e) { return rateOf(e, store.settings); }
 function jobsList() { return Array.isArray(store.settings.jobs) ? store.settings.jobs : []; }
 function jobName(id) { const j = jobsList().find((x) => x.id === id); return j ? j.name : ''; }
 
-function renderStats(entries) {
-  let totalMin = 0;
-  const workDays = new Set(), vac = new Set(), sick = new Set();
-  entries.forEach((e) => {
-    const t = entryType(e);
-    if (t === 'vacation') { vac.add(e.date); return; }
-    if (t === 'sick') { sick.add(e.date); return; }
-    totalMin += workedMinutes(e); workDays.add(e.date);
-  });
-  // Pay is computed once, centrally, via grossForMonth()/travelForMonth() —
-  // not re-derived here — so this quick total always matches the deeper
-  // payslip on the "עוד" page (same rate rules, overtime tiers, sick-day
-  // credit, and global/fixed-salary mode all apply identically everywhere).
-  const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
-  const totalPay = grossForMonth(entries, store.settings, viewYear, viewMonth).gross + travelPay;
-  $('statHours').textContent = fmtHours(totalMin);
-  $('statDays').textContent = workDays.size;
-  const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0 || totalPay > 0;
-  $('statPayCard').hidden = !anyRate;
-  if (anyRate) $('statPay').textContent = fmtMoney(totalPay, store.settings.currency);
-
-  const parts = [];
-  if (vac.size) parts.push(`<span class="off-pill vac">${svg('vacation')}<b>${vac.size}</b> חופשה</span>`);
-  if (sick.size) parts.push(`<span class="off-pill sick">${svg('sick')}<b>${sick.size}</b> מחלה</span>`);
-  $('offPills').innerHTML = parts.join(''); $('offPills').hidden = parts.length === 0;
-
-  // goal progress rings (weekly + monthly)
-  const goalM = Number(store.settings.goalHours) || 0;
-  const goalW = Number(store.settings.goalWeekHours) || 0;
-  const rings = [];
-  // The "השבוע" ring tracks the real current week (currentWeekMinutes() always
-  // uses today's date, not the viewed month) — only meaningful while actually
-  // viewing the current month. Without this guard it kept showing "this real
-  // week" even while browsing a past/future month, silently mismatching
-  // whatever period the rest of the page was displaying.
-  const today = new Date();
-  const isViewingCurrentMonth = viewYear === today.getFullYear() && viewMonth === today.getMonth();
-  if (goalW > 0 && isViewingCurrentMonth) { const wk = currentWeekMinutes(); rings.push(ringSVG((wk / 60 / goalW) * 100, 'השבוע', `${fmtHours(wk)} / ${goalW}`, weekLabel(weekStartISO(today)))); }
-  if (goalM > 0) { rings.push(ringSVG((totalMin / 60 / goalM) * 100, 'החודש', `${fmtHours(totalMin)} / ${goalM}`, `${MONTHS[viewMonth]} ${viewYear}`)); }
-  const gr = $('goalRings');
-  gr.innerHTML = rings.join('');
-  gr.hidden = rings.length === 0;
-  gr.classList.toggle('single', rings.length === 1);
-}
-
 function currentWeekMinutes() {
   const wk = weekStartISO(new Date());
   return jobFilteredEntries().reduce((s, e) => (isWork(e) && weekStartISO(parseDate(e.date)) === wk ? s + workedMinutes(e) : s), 0);
 }
-// A modern progress donut. pct is 0..∞ (clamped for the arc; shown rounded).
-function ringSVG(pctRaw, label, sub, caption) {
-  const pct = Math.max(0, Math.min(100, pctRaw));
-  const done = pctRaw >= 100;
-  const r = 42, C = 2 * Math.PI * r;
-  const off = C * (1 - pct / 100);
-  return `<div class="ring-wrap${done ? ' done' : ''}">
-    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
-      <circle class="ring-bg" cx="50" cy="50" r="${r}"></circle>
-      <circle class="ring-fg" cx="50" cy="50" r="${r}" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}" stroke-linecap="round"></circle>
-      <text class="ring-pct" x="50" y="52" text-anchor="middle" dominant-baseline="central">${Math.round(pctRaw)}%</text>
-    </svg>
-    <span class="ring-label">${label}</span>
-    <span class="ring-sub">${sub} ש׳</span>
-    ${caption ? `<span class="ring-cap">${caption}</span>` : ''}
-  </div>`;
-}
-
 // "+2:15" / "−1:40" — a signed hour label for a goal comparison.
-function fmtDiff(mins) { return `${mins < 0 ? '−' : '+'}${fmtHours(Math.abs(mins))}`; }
+function fmtDiff(mins) { return `<bdi dir="ltr">${mins < 0 ? '−' : '+'}${fmtHours(Math.abs(mins))}</bdi>`; }
 
 // Hours expected per *scheduled* workday, derived from the weekly goal and
 // how many weekdays are actually worked (settings.offDays) — e.g. 44h/week
@@ -419,7 +363,16 @@ function isScheduledWorkday(date) {
 function weeklyGoalBreakdown(entries, y, m) {
   const daily = dailyHourTarget();
   const weeks = new Map();
-  entries.forEach((e) => { if (!isWork(e)) return; const wk = weekStartISO(parseDate(e.date)); weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e)); });
+  const weekDays = new Map();
+  entries.forEach((e) => {
+    if (!isWork(e)) return;
+    const wk = weekStartISO(parseDate(e.date));
+    weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e));
+    if (!weekDays.has(wk)) weekDays.set(wk, new Set());
+    weekDays.get(wk).add(e.date);
+  });
+  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
+  const fullWeekDays = Math.max(1, 7 - offDays.length);
   return [...weeks.entries()].filter(([, mins]) => mins > 0).sort((a, b) => a[0].localeCompare(b[0])).map(([wk, mins]) => {
     let scheduledDaysInMonth = 0;
     const start = parseDate(wk);
@@ -430,34 +383,25 @@ function weeklyGoalBreakdown(entries, y, m) {
     const hasGoal = daily > 0;
     const goalMins = hasGoal ? Math.round(daily * 60 * scheduledDaysInMonth) : 0;
     const diffMins = hasGoal ? mins - goalMins : 0;
-    return { wk, mins, scheduledDaysInMonth, hasGoal, goalMins, diffMins };
+    const days = weekDays.get(wk) ? weekDays.get(wk).size : 0;
+    // A week the month boundary cuts through is judged only on its days
+    // inside this month — say so, or a short goal looks like a mistake.
+    const partial = scheduledDaysInMonth < fullWeekDays;
+    return { wk, mins, days, scheduledDaysInMonth, partial, hasGoal, goalMins, diffMins };
   });
 }
 
-function renderWeekly(entries) {
-  const card = $('weeklyCard'), body = $('weeklyBody');
-  const rows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
-  if (rows.length < 2) { card.hidden = true; return; }
-  card.hidden = false;
-  const max = Math.max(...rows.map((r) => r.mins)); // fallback bar scale when no weekly goal is set
-  body.innerHTML = rows.map((r) => {
-    const pct = r.hasGoal ? Math.min(100, Math.round((r.mins / Math.max(1, r.goalMins)) * 100)) : Math.round((r.mins / max) * 100);
-    const diff = r.hasGoal ? `<span class="week-diff ${r.diffMins >= 0 ? 'pos' : 'neg'}">${fmtDiff(r.diffMins)}</span>` : '';
-    return `<div class="week-row"><span class="week-name">${weekLabel(r.wk)}</span><span class="week-bar${r.hasGoal ? ' compact' : ''}"><span class="week-bar-fill" style="width:${pct}%"></span></span><span class="week-val">${fmtHours(r.mins)}</span>${diff}</div>`;
-  }).join('');
-  $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen));
-  body.hidden = !weeklyOpen;
-}
+// ------------------------------------------------------------------ month report
+// Everything about the viewed month, in one card: three headline numbers,
+// then one of three tabs — the month at a glance, week by week, and days off.
+const REPORT_TABS = ['overview', 'weeks', 'absence'];
+function reportTab() { return REPORT_TABS.includes(uiPrefs.reportTab) ? uiPrefs.reportTab : 'overview'; }
+function setReportTab(t) { if (!REPORT_TABS.includes(t)) return; setUiPref('reportTab', t); renderReport(monthEntries()); }
 
-// Monthly report — actual hours worked this month vs. the monthly goal (if
-// one is set), salary, and a days breakdown. Same visual language as the
-// weekly summary card above it (.week-row / .week-bar), so it reads as a
-// matching pair rather than a bolted-on extra.
-function renderMonthlyReport(entries) {
-  const card = $('monthlyCard'), body = $('monthlyBody');
-  if (!entries.length) { card.hidden = true; return; }
-  card.hidden = false;
-
+// The month's numbers, computed once for the headline and every tab. Pay
+// comes from grossForMonth()/travelForMonth() — the same source as the
+// payslip on the "עוד" page — so the two can never disagree.
+function monthFacts(entries) {
   let totalMin = 0;
   const workDays = new Set(), vac = new Set(), sick = new Set();
   entries.forEach((e) => {
@@ -466,102 +410,155 @@ function renderMonthlyReport(entries) {
     if (t === 'sick') { sick.add(e.date); return; }
     totalMin += workedMinutes(e); workDays.add(e.date);
   });
-  // Same centralized pay source as renderStats() — see its comment.
-  const travelPay = travelForMonth(entries, store.settings, viewYear, viewMonth).total;
-  const totalPay = grossForMonth(entries, store.settings, viewYear, viewMonth).gross + travelPay;
-  const goalM = Number(store.settings.goalHours) || 0;
-  const rate = Number(store.settings.rate) || 0;
-  const anyRate = rate > 0 || entries.some((e) => e.rate) || travelPay > 0 || totalPay > 0;
-
-  const rows = [];
-  if (goalM > 0) {
-    const pct = Math.round((totalMin / 60 / goalM) * 100);
-    const remainMin = Math.max(0, goalM * 60 - totalMin);
-    rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-bar"><span class="week-bar-fill" style="width:${Math.min(100, pct)}%"></span></span><span class="week-val">${fmtHours(totalMin)} / ${goalM}</span></div>`);
-    rows.push(`<p class="form-note">${pct >= 100 ? `היעד הושלם ✓ (${pct}%)` : `נותרו ${fmtHours(remainMin)} שעות ליעד החודשי (${pct}%)`}</p>`);
-  } else {
-    rows.push(`<div class="week-row"><span class="week-name">שעות</span><span class="week-val">${fmtHours(totalMin)}</span></div>`);
-  }
-  if (anyRate) rows.push(`<div class="week-row"><span class="week-name">שכר${travelPay ? ' (כולל נסיעות)' : ''}</span><span class="week-val">${fmtMoney(totalPay, store.settings.currency)}</span></div>`);
-  const weekRows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
-  if (weekRows.some((r) => r.hasGoal)) {
-    const totalDiff = weekRows.reduce((s, r) => s + r.diffMins, 0);
-    rows.push(`<div class="week-row"><span class="week-name">הפרש מהיעד השבועי</span><span class="week-val ${totalDiff >= 0 ? 'pos' : 'neg'}">${fmtDiff(totalDiff)}</span></div>`);
-  }
-  rows.push(`<div class="week-row"><span class="week-name">ימי עבודה</span><span class="week-val">${workDays.size}</span></div>`);
-  if (vac.size) rows.push(`<div class="week-row"><span class="week-name">ימי חופשה</span><span class="week-val">${vac.size}</span></div>`);
-  if (sick.size) rows.push(`<div class="week-row"><span class="week-name">ימי מחלה</span><span class="week-val">${sick.size}</span></div>`);
-
-  body.innerHTML = rows.join('');
-  $('monthlyToggle').setAttribute('aria-expanded', String(monthlyOpen));
-  body.hidden = !monthlyOpen;
+  const s = store.settings;
+  const g = grossForMonth(entries, s, viewYear, viewMonth);
+  const travel = travelForMonth(entries, s, viewYear, viewMonth).total;
+  const totalPay = g.gross + travel;
+  const anyRate = (Number(s.rate) || 0) > 0 || entries.some((e) => e.rate) || travel > 0 || totalPay > 0;
+  return { totalMin, workDays: workDays.size, vacDays: vac.size, sickDays: sick.size, g, travel, totalPay, anyRate };
 }
 
-// Vacation and sick days for the viewed month, plus the year's vacation
-// balance. On the reports page rather than the "עוד" page: it belongs beside
-// the month it describes, and it's something you check a few times a year
-// rather than never.
-function renderAbsences(entries) {
-  const card = $('absenceCard'), body = $('absenceBody');
-  if (!card || !body) return;
+function renderStats(f) {
+  $('statHours').textContent = fmtHours(f.totalMin);
+  $('statDays').textContent = f.workDays;
+  $('statPayCard').hidden = !f.anyRate;
+  if (f.anyRate) $('statPay').textContent = fmtMoney(f.totalPay, store.settings.currency);
+}
+
+function renderReport(entries) {
+  const f = monthFacts(entries);
+  renderStats(f);
+  const tab = reportTab();
+  $('reportTabs').querySelectorAll('button[data-tab]').forEach((b) => {
+    const on = b.dataset.tab === tab;
+    b.classList.toggle('on', on);
+    b.setAttribute('aria-selected', String(on));
+  });
+  const body = $('reportBody');
+  body.dataset.tab = tab;
+  body.innerHTML = tab === 'weeks' ? reportWeeks(entries) : tab === 'absence' ? reportAbsence(entries) : reportOverview(entries, f);
+}
+
+const rpRow = (k, v, cls = '') => `<div class="rp-row${cls ? ' ' + cls : ''}"><span class="rp-k">${k}</span><span class="rp-v">${v}</span></div>`;
+
+// A goal as a labelled bar: what's done, out of what, and what's left.
+function goalBlock(title, caption, doneMin, goalH) {
+  const pct = Math.round((doneMin / 60 / goalH) * 100);
+  const remain = Math.max(0, goalH * 60 - doneMin);
+  const done = pct >= 100;
+  return `<div class="rp-goal${done ? ' done' : ''}">
+    <div class="rp-goal-top"><span class="rp-goal-title">${title}<small>${caption}</small></span><span class="rp-goal-val"><b>${fmtHours(doneMin)}</b> / ${goalH} ש׳</span></div>
+    <div class="rp-bar"><span style="width:${Math.min(100, pct)}%"></span></div>
+    <div class="rp-goal-sub">${done ? `<span class="pos">היעד הושלם ✓</span>` : `<span>נותרו ${fmtHours(remain)} ש׳</span>`}<span>${pct}%</span></div>
+  </div>`;
+}
+
+function reportOverview(entries, f) {
+  if (!entries.length) return `<p class="rp-empty">אין עדיין רישומים ב${MONTHS[viewMonth]}.</p>`;
+  const s = store.settings, cur = s.currency;
+  const parts = [];
+
+  // goals
+  const goalM = Number(s.goalHours) || 0, goalW = Number(s.goalWeekHours) || 0;
+  const today = new Date();
+  const isCurrent = viewYear === today.getFullYear() && viewMonth === today.getMonth();
+  const goals = [];
+  if (goalM > 0) goals.push(goalBlock('יעד חודשי', `${MONTHS[viewMonth]}`, f.totalMin, goalM));
+  if (goalW > 0 && isCurrent) goals.push(goalBlock('השבוע', weekLabel(weekStartISO(today)), currentWeekMinutes(), goalW));
+  if (goals.length) parts.push(`<div class="rp-sec">${goals.join('')}</div>`);
+
+  // days
+  const pill = (n, label, cls) => `<div class="rp-day ${cls}${n ? '' : ' zero'}"><b>${n}</b><span>${label}</span></div>`;
+  parts.push(`<div class="rp-days">${pill(f.workDays, 'עבודה', 'work')}${pill(f.vacDays, 'חופשה', 'vac')}${pill(f.sickDays, 'מחלה', 'sick')}</div>`);
+
+  // hours facts
+  const rows = [];
+  if (f.workDays) rows.push(rpRow('ממוצע ליום עבודה', `${fmtHours(Math.round(f.totalMin / f.workDays))} ש׳`));
+  const weekRows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
+  if (weekRows.some((r) => r.hasGoal)) {
+    const diff = weekRows.reduce((acc, r) => acc + r.diffMins, 0);
+    rows.push(rpRow('מאזן מול היעד השבועי', `<span class="${diff >= 0 ? 'pos' : 'neg'}">${fmtDiff(diff)} ש׳</span>`));
+  }
+  if (f.g.premiumHours) rows.push(rpRow('שעות ב-200%', `${fmtHours(Math.round(f.g.premiumHours * 60))} ש׳`));
+  if (rows.length) parts.push(`<div class="rp-list">${rows.join('')}</div>`);
+
+  // pay breakdown — where the month's money comes from
+  if (f.anyRate) {
+    const global = payrollOf(s).payMode === 'global';
+    const sickPay = global ? 0 : f.g.sick.pay;
+    const base = f.g.gross - f.g.premium - sickPay;
+    const pay = [];
+    pay.push(rpRow(global ? 'משכורת קבועה' : 'שכר עבודה', fmtMoney(base, cur)));
+    if (f.g.premium) pay.push(rpRow('תוספת 200%', `<bdi dir="ltr">+${fmtMoney(f.g.premium, cur)}</bdi>`, 'plus'));
+    if (sickPay) pay.push(rpRow('דמי מחלה', `<bdi dir="ltr">+${fmtMoney(sickPay, cur)}</bdi>`, 'plus'));
+    if (f.travel) pay.push(rpRow('נסיעות', `<bdi dir="ltr">+${fmtMoney(f.travel, cur)}</bdi>`, 'plus'));
+    pay.push(rpRow('סה״כ ברוטו', fmtMoney(f.totalPay, cur), 'total'));
+    parts.push(`<div class="rp-list"><div class="rp-list-title">שכר החודש</div>${pay.join('')}</div>`);
+  }
+  return parts.join('');
+}
+
+function reportWeeks(entries) {
+  const rows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
+  if (!rows.length) return `<p class="rp-empty">אין עדיין שעות עבודה ב${MONTHS[viewMonth]}.</p>`;
+  const hasGoal = rows.some((r) => r.hasGoal);
+  const scale = Math.max(1, ...rows.map((r) => Math.max(r.mins, r.goalMins)));
+  const html = rows.map((r) => {
+    const pct = r.hasGoal ? Math.min(100, Math.round((r.mins / Math.max(1, r.goalMins)) * 100)) : Math.round((r.mins / scale) * 100);
+    const diff = r.hasGoal
+      ? `<span class="rw-diff ${r.diffMins >= 0 ? 'pos' : 'neg'}">${fmtDiff(r.diffMins)} ${r.diffMins >= 0 ? 'מעל היעד' : 'מתחת ליעד'}</span>`
+      : '';
+    return `<div class="rw${r.hasGoal && r.diffMins >= 0 ? ' done' : ''}">
+      <div class="rw-top"><span class="rw-name">${weekLabel(r.wk)}${r.partial ? '<small>חלקי</small>' : ''}</span><span class="rw-val"><b>${fmtHours(r.mins)}</b>${r.hasGoal ? ` / ${fmtHours(r.goalMins)}` : ''}</span></div>
+      <div class="rp-bar"><span style="width:${pct}%"></span></div>
+      <div class="rw-sub"><span>${r.days === 1 ? 'יום עבודה אחד' : `${r.days} ימי עבודה`}</span>${diff}</div>
+    </div>`;
+  }).join('');
+  let foot = '';
+  if (hasGoal) {
+    const total = rows.reduce((acc, r) => acc + r.diffMins, 0);
+    foot = `<div class="rp-list">${rpRow('סה״כ מול היעד', `<span class="${total >= 0 ? 'pos' : 'neg'}">${fmtDiff(total)} ש׳</span>`, 'total')}</div>
+      <p class="rp-note">שבוע ש"חלקי" — רק הימים שלו שבתוך ${MONTHS[viewMonth]} נספרים ביעד.</p>`;
+  } else {
+    foot = `<p class="rp-note">הגדירו יעד שבועי בהגדרות כדי לראות לכל שבוע אם עמדתם ביעד.</p>`;
+  }
+  return `<div class="rw-list">${html}</div>${foot}`;
+}
+
+function reportAbsence(entries) {
   const s = store.settings;
   // sickMonth needs every entry, not the month's: an illness that began last
   // month carries its day count into this one.
   const sick = sickMonth(store.entries, s, viewYear, viewMonth);
   const vacDays = entries.filter((e) => entryType(e) === 'vacation').length;
   const vb = vacationBalance(store.entries, s, viewYear);
+  const anyRate = (Number(s.rate) || 0) > 0 || sick.pay > 0;
 
-  if (!sick.count && !vacDays && !vb.used && !vb.entitled) { card.hidden = true; return; }
-  card.hidden = false;
+  const vacTile = `<div class="ab-tile vac">
+    <div class="ab-head">${svg('vacation')}<span>חופשה</span></div>
+    <div class="ab-big"><b>${vacDays}</b><span>ימים החודש</span></div>
+    <div class="ab-line"><span>השנה</span><b>${vb.entitled ? `${vb.used} מתוך ${vb.entitled}` : vb.used}</b></div>
+    ${vb.entitled ? `<div class="ab-line"><span>יתרה</span><b class="pos">${vb.remaining}</b></div>` : ''}
+    <button type="button" class="ab-add" id="markVacBtn">+ סימון חופשה</button>
+  </div>`;
+  const sickTile = `<div class="ab-tile sick">
+    <div class="ab-head">${svg('sick')}<span>מחלה</span></div>
+    <div class="ab-big"><b>${sick.count}</b><span>ימים החודש</span></div>
+    <div class="ab-line"><span>השנה</span><b>${vb.sick}</b></div>
+    ${sick.count && anyRate ? `<div class="ab-line"><span>דמי מחלה</span><b>${fmtMoney(sick.pay, s.currency)}</b></div>` : ''}
+    <button type="button" class="ab-add" id="markSickBtn">+ סימון מחלה</button>
+  </div>`;
 
-  // Both halves, always. A card called "חופשה ומחלה" that shows only one of
-  // them reads as broken rather than as "none this month" — the absence of a
-  // section says nothing, while a zero says exactly what it means.
-  const sum = [];
-  if (vacDays) sum.push(`${vacDays} חופשה`);
-  if (sick.count) sum.push(`${sick.count} מחלה`);
-  $('absenceSummary').textContent = sum.length ? sum.join(' · ') : 'אין החודש';
-
-  const parts = [];
-
-  // --- vacation ---
-  {
-    const rows = [];
-    rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">${vacDays}</span></div>`);
-    rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.used} מתוך ${vb.entitled}</span></div>`);
-    rows.push(`<div class="week-row"><span class="week-name">יתרה</span><span class="week-val ${vb.remaining > 0 ? 'pos' : ''}">${vb.remaining} ימים</span></div>`);
-    rows.push(`<button type="button" class="btn ghost-line" id="markVacBtn" style="margin-top:4px">+ סימון חופשה שנוצלה</button>`);
-    parts.push(`<div class="abs-group"><div class="abs-head vac">${svg('vacation')} ימי חופשה</div>${rows.join('')}</div>`);
+  let list = '';
+  if (sick.count) {
+    list = `<div class="rp-list"><div class="rp-list-title">ימי המחלה ב${MONTHS[viewMonth]}</div>${sick.days.map((d) => {
+      const dt = parseDate(d.date);
+      const pct = d.factor === 0 ? 'ללא תשלום' : `${d.factor * 100}%`;
+      return `<div class="sick-day"><span class="sick-date">${dt.getDate()} ב${MONTHS[dt.getMonth()]}</span><span class="sick-nth">יום ${d.dayInEpisode} למחלה</span><span class="sick-pct" data-f="${d.factor}">${pct}</span></div>`;
+    }).join('')}</div>
+    <p class="rp-note">לפי חוק דמי מחלה: היום הראשון ללא תשלום, השני והשלישי בחצי שכר, ומהיום הרביעי שכר מלא. ימים רצופים (גם עם ימי מנוחה באמצע) נספרים כמחלה אחת.</p>`;
   }
-
-  // --- sick ---
-  {
-    const rows = [];
-    if (sick.count) {
-      rows.push(...sick.days.map((d) => {
-        const dt = parseDate(d.date);
-        const pct = d.factor === 0 ? 'ללא תשלום' : `${d.factor * 100}%`;
-        return `<div class="sick-day">
-          <span class="sick-date">${dt.getDate()} ב${MONTHS[dt.getMonth()]}</span>
-          <span class="sick-nth">יום ${d.dayInEpisode} למחלה</span>
-          <span class="sick-pct" data-f="${d.factor}">${pct}</span>
-        </div>`;
-      }));
-      const anyRate = (Number(s.rate) || 0) > 0 || sick.pay > 0;
-      if (anyRate) rows.push(`<div class="week-row"><span class="week-name">תשלום דמי מחלה</span><span class="week-val">${fmtMoney(sick.pay, s.currency)}</span></div>`);
-    } else {
-      rows.push(`<div class="week-row"><span class="week-name">נוצלו החודש</span><span class="week-val">0</span></div>`);
-    }
-    rows.push(`<div class="week-row"><span class="week-name">נוצלו ב-${viewYear}</span><span class="week-val">${vb.sick} ימים</span></div>`);
-    rows.push(`<button type="button" class="btn ghost-line" id="markSickBtn" style="margin-top:4px">+ סימון מחלה</button>`);
-    // The rule only needs explaining where it's being applied.
-    if (sick.count) rows.push(`<p class="abs-note">לפי חוק דמי מחלה: היום הראשון של כל מחלה ללא תשלום, השני והשלישי 50%, ומהרביעי 100%. ימים רצופים נספרים כמחלה אחת — ימי מנוחה באמצע לא מתחילים ספירה מחדש.</p>`);
-    parts.push(`<div class="abs-group"><div class="abs-head sick">${svg('sick')} ימי מחלה</div>${rows.join('')}</div>`);
-  }
-
-  body.innerHTML = parts.join('');
-  $('absenceToggle').setAttribute('aria-expanded', String(absenceOpen));
-  body.hidden = !absenceOpen;
+  return `<div class="ab-tiles">${vacTile}${sickTile}</div>${list}`;
 }
 
 function escapeHtml(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -611,8 +608,9 @@ function renderEntries(entries) {
         const off = jn ? `<span class="entry-job">${escapeHtml(jn)}</span>` : (e.note ? `<span class="note">${escapeHtml(e.note)}</span>` : 'יום מלא');
         card.innerHTML = `<div class="entry-badge">${svg(t)}</div><div class="entry-main"><span class="entry-range">${TYPE_LABEL[t]}</span><span class="entry-meta">${off}</span></div><span class="entry-edit">${svg('pencil')}</span>`;
       } else {
-        const mins = workedMinutes(e), r = effRate(e), pay = decimalHours(mins) * r;
+        const mins = workedMinutes(e), r = effRate(e), pay = entryPay(e, store.settings);
         const meta = [];
+        if (payFactor(e) !== 1) meta.push(`<span class="pct-badge">${Math.round(payFactor(e) * 100)}%</span>`);
         if (jn) meta.push(`<span class="entry-job">${escapeHtml(jn)}</span>`);
         if (e.breakMin) meta.push(`הפסקה ${e.breakMin} דק׳`);
         if (e.note) meta.push(`<span class="note">${escapeHtml(e.note)}</span>`);
@@ -653,9 +651,10 @@ function tileDetail(e) {
     if (e.breakMin) row('הפסקה', `${e.breakMin} דק׳`);
     const mins = workedMinutes(e), r = effRate(e);
     row('סה״כ', `${fmtHours(mins)} שעות`);
+    if (payFactor(e) !== 1) row('אחוז שכר', `${Math.round(payFactor(e) * 100)}%`);
     if (r) {
       row('תעריף', `${fmtMoney(r, store.settings.currency)} לשעה`);
-      row('שכר', fmtMoney(decimalHours(mins) * r, store.settings.currency));
+      row('שכר', fmtMoney(entryPay(e, store.settings), store.settings.currency));
     }
   } else {
     row('סוג', TYPE_LABEL[t]);
@@ -691,9 +690,9 @@ function renderEntriesCompact(entries, wrap) {
     let face;
     if (t === 'work') {
       const mins = workedMinutes(e), r = effRate(e);
-      face = `<span class="etile-date">${dateLabel}</span>
+      face = `${payFactor(e) !== 1 ? `<span class="pct-badge etile-pct">${Math.round(payFactor(e) * 100)}%</span>` : ''}<span class="etile-date">${dateLabel}</span>
         <span class="etile-hours">${fmtHours(mins)}</span>
-        ${r ? `<span class="etile-pay">${fmtMoney(decimalHours(mins) * r, store.settings.currency)}</span>` : ''}`;
+        ${r ? `<span class="etile-pay">${fmtMoney(entryPay(e, store.settings), store.settings.currency)}</span>` : ''}`;
     } else {
       face = `<span class="etile-date">${dateLabel}</span>
         <span class="etile-ic">${svg(t)}</span>
@@ -729,7 +728,7 @@ function toggleEntryExpand(id) {
   }
 }
 
-function renderAll() { const e = monthEntries(); renderStats(e); renderWeekly(e); renderMonthlyReport(e); renderAbsences(e); renderEntries(e); }
+function renderAll() { const e = monthEntries(); renderReport(e); renderEntries(e); }
 
 // ------------------------------------------------------------------ bulk selection / delete
 function updateSelectBar() {
@@ -928,6 +927,12 @@ function setFormType(type) {
 function setFDate(iso) { $('fDate').value = iso; $('fDateText').textContent = longDate(parseDate(iso)); }
 function setFStart(v) { $('fStart').value = v; $('fStartText').textContent = v; }
 function setFEnd(v) { $('fEnd').value = v; $('fEndText').textContent = v; }
+function setFPayPct(pct) {
+  const v = Number(pct) === 200 ? 200 : 100;
+  $('fPayPct').value = String(v);
+  $('payPctChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.pct) === v));
+  $('fPayPctNote').hidden = v === 100;
+}
 function setFBreak(min) {
   $('fBreak').value = String(min);
   $('breakChips').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Number(b.dataset.min) === Number(min)));
@@ -954,7 +959,7 @@ function setJobChip(id) {
 }
 
 function serializeForm() {
-  return JSON.stringify([formType, $('fJob').value, $('fDate').value, $('fStart').value, $('fEnd').value, $('fBreak').value, $('fRate').value, $('fNote').value.trim()]);
+  return JSON.stringify([formType, $('fJob').value, $('fDate').value, $('fStart').value, $('fEnd').value, $('fBreak').value, $('fPayPct').value, $('fRate').value, $('fNote').value.trim()]);
 }
 function isDirty() { return serializeForm() !== formSnapshot; }
 
@@ -966,7 +971,7 @@ function openEntry(id = null) {
     const e = store.entries.find((x) => x.id === id);
     if (!e) return;
     $('sheetTitle').textContent = 'עריכת רישום';
-    setFDate(e.date); setFStart(e.start || '09:00'); setFEnd(e.end || '17:00'); setFBreak(e.breakMin || 0);
+    setFDate(e.date); setFStart(e.start || '09:00'); setFEnd(e.end || '17:00'); setFBreak(e.breakMin || 0); setFPayPct(e.payPct || 100);
     $('fRate').value = e.rate ?? ''; $('fNote').value = e.note || '';
     renderJobChips(e.jobId || '');
     setFormType(entryType(e)); del.hidden = false;
@@ -974,6 +979,7 @@ function openEntry(id = null) {
     $('sheetTitle').textContent = 'רישום חדש';
     setFDate(todayISO()); setFStart('09:00'); setFEnd('17:00');
     setFBreak(suggestedBreakMinutes(rawShiftMinutes('09:00', '17:00'), store.settings));
+    setFPayPct(100);
     $('fRate').value = ''; $('fNote').value = '';
     renderJobChips(jobFilter || '');
     setFormType('work'); del.hidden = true;
@@ -1003,7 +1009,8 @@ function updateCalc() {
   const mins = workedMinutes({ start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0 });
   $('calcHours').textContent = `${fmtHours(mins)} שעות`;
   const rate = rateOf({ rate: $('fRate').value === '' ? '' : Number($('fRate').value), jobId: $('fJob').value }, store.settings);
-  $('calcPay').textContent = rate ? fmtMoney(decimalHours(mins) * rate, store.settings.currency) : '';
+  const pct = Number($('fPayPct').value) || 100;
+  $('calcPay').textContent = rate ? fmtMoney(decimalHours(mins) * rate * (pct / 100), store.settings.currency) + (pct !== 100 ? ` · ${pct}%` : '') : (pct !== 100 ? `${pct}%` : '');
   const note = $('fBreakNote');
   if (note) note.hidden = formType !== 'work' || rawShiftMinutes($('fStart').value, $('fEnd').value) < 360;
 }
@@ -1015,11 +1022,11 @@ function submitEntry(ev) {
   const jobId = $('fJob').value || '';
   let data;
   if (formType === 'work') {
-    data = { type: 'work', date, jobId, start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0, rate: $('fRate').value === '' ? '' : Number($('fRate').value), note: $('fNote').value.trim() };
+    data = { type: 'work', date, jobId, start: $('fStart').value, end: $('fEnd').value, breakMin: Number($('fBreak').value) || 0, payPct: Number($('fPayPct').value) === 200 ? 200 : 100, rate: $('fRate').value === '' ? '' : Number($('fRate').value), note: $('fNote').value.trim() };
     if (!data.start || !data.end) { toast('נא לבחור שעת כניסה ויציאה'); return; }
     if (workedMinutes(data) === 0) { toast('משך המשמרת אפס · בדקו את שעות הכניסה והיציאה'); return; }
   } else {
-    data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, rate: '', note: $('fNote').value.trim() };
+    data = { type: formType, date, jobId, start: '', end: '', breakMin: 0, payPct: 100, rate: '', note: $('fNote').value.trim() };
   }
   if (editingId) {
     clearAutoCloseFlag(editingId); store.updateEntry(editingId, data); toast('הרישום עודכן');
@@ -1116,7 +1123,6 @@ function openSettings() {
   $('sRate').value = s.rate || 0;
   $('sGoal').value = s.goalHours || 0;
   $('sGoalWeek').value = s.goalWeekHours || 0;
-  $('sDark').checked = s.theme === 'dark';
   reminderPick = s.reminderTime || '18:00';
   $('sReminder').checked = !!s.reminder;
   $('sReminderTimeText').textContent = reminderPick;
@@ -1129,8 +1135,14 @@ function openSettings() {
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
+  updateAccountUI();
+  // Open exactly the groups that were open last time; first time round,
+  // the one people come here for most — pay.
+  const open = uiPrefs.settingsOpen && typeof uiPrefs.settingsOpen === 'object' ? uiPrefs.settingsOpen : { pay: true };
+  $('settingsForm').querySelectorAll('details.set-group').forEach((d) => { d.open = !!open[d.dataset.group]; });
   settingsFormSnapshot = serializeSettingsForm();
   openSheet($('settingsSheet'));
+  $('settingsSheet').querySelector('.sheet').scrollTop = 0;
 }
 async function tryCloseSettings() {
   if (isSettingsDirty() && !(await confirmDiscard())) return;
@@ -1220,10 +1232,11 @@ let lastSyncState = null;
 function renderSyncStatus() {
   const el = $('syncStatus'), btn = $('authBtn'), acc = $('settingsBtn');
   const setDot = (state) => { if (acc) { acc.classList.toggle('sync-pending', state === 'pending' || state === 'offline'); } };
-  if (!store.cloudAvailable) { el.textContent = 'מצב שמירה: מקומי במכשיר'; el.dataset.state = 'local'; btn.hidden = true; setDot('local'); return; }
+  if (!store.cloudAvailable) { el.textContent = 'הנתונים נשמרים רק במכשיר הזה'; el.dataset.state = 'local'; btn.hidden = true; setDot('local'); return; }
   btn.hidden = false;
-  if (!store.user) { el.textContent = 'מצב שמירה: מקומי · התחברו לסנכרון בענן'; el.dataset.state = 'local'; btn.textContent = 'התחברות לחשבון Google'; setDot('local'); return; }
+  if (!store.user) { el.textContent = 'התחברו עם Google לסנכרון בין מכשירים'; el.dataset.state = 'local'; btn.textContent = 'התחברות'; btn.classList.remove('out'); setDot('local'); return; }
   btn.textContent = 'התנתקות';
+  btn.classList.add('out');
   const who = store.user.email || store.user.name || 'מחובר';
   const state = store.syncState;
   el.dataset.state = state;
@@ -1243,6 +1256,17 @@ function renderSyncStatus() {
 // top-bar button, and toast once when a sign-in actually completes.
 function updateAccountUI() {
   const btn = $('settingsBtn'), u = store.user;
+  // The account card at the top of Settings — what the avatar button opens.
+  const av = $('acctAvatar'), nm = $('acctName');
+  if (av && nm) {
+    if (u) {
+      av.innerHTML = u.photo ? `<img src="${escapeHtml(u.photo)}" referrerpolicy="no-referrer" alt="">` : `<span>${escapeHtml((u.name || '?').trim().charAt(0) || '?')}</span>`;
+      nm.textContent = u.name || u.email || 'מחובר';
+    } else {
+      av.innerHTML = svg('user');
+      nm.textContent = store.cloudAvailable ? 'לא מחובר' : 'שמירה במכשיר';
+    }
+  }
   if (u) {
     btn.classList.add('synced');
     btn.setAttribute('aria-label', 'החשבון שלי — ' + (u.name || ''));
@@ -1275,7 +1299,6 @@ function submitSettings(ev) {
   store.saveSettings({
     name: $('sName').value.trim(), rate: Number($('sRate').value) || 0,
     goalHours: Number($('sGoal').value) || 0, goalWeekHours: Number($('sGoalWeek').value) || 0,
-    theme: $('sDark').checked ? 'dark' : 'light',
     reminder: $('sReminder').checked, reminderTime: reminderPick,
     offDays: [...offDaysPick].sort(),
     autoBreakMin: Math.min(120, Math.max(0, Math.round(Number($('sAutoBreak').value)) || 0)),
@@ -1652,7 +1675,7 @@ function renderMore() {
     </div>
   </div>`;
 
-  // Vacation and sick days are on the reports page now (renderAbsences) —
+  // Vacation and sick days are on the reports page now (reportAbsence) —
   // beside the month they describe, one tap from home, instead of at the
   // bottom of this one.
 
@@ -1993,12 +2016,18 @@ function setNoteCat(id) { $('nCatChips').dataset.sel = id || ''; renderNoteCatCh
 function currentNoteCat() { return $('nCatChips').dataset.sel || ''; }
 
 function renderNoteFields() {
+  // Label on a slim line of its own with the row's actions; the value gets
+  // the whole width under it, so a password or a code is never cut off.
+  // dir="auto" keeps a Latin value (a password, an email) reading left to
+  // right instead of having its punctuation flipped to the wrong end.
   $('nFields').innerHTML = noteDraft.fields.map((f, i) =>
     `<div class="nfield-row" data-i="${i}">
-      <input type="text" class="nfield-label" data-i="${i}" placeholder="תווית" value="${escapeHtml(f.label || '')}" />
-      <input type="text" class="nfield-value" data-i="${i}" placeholder="ערך" value="${escapeHtml(f.value || '')}" />
-      <button type="button" class="fld-secret ${f.secret ? 'on' : ''}" data-secret="${i}" aria-label="${f.secret ? 'שדה מוסתר' : 'הצגה גלויה'}" title="הסתרה — יוצג רק בלחיצה">${svg(f.secret ? 'eyeOff' : 'eye')}</button>
-      <button type="button" class="row-del" data-del-field="${i}" aria-label="הסרה">${svg('trash')}</button>
+      <div class="nfield-top">
+        <input type="text" class="nfield-label" data-i="${i}" placeholder="תווית (למשל: סיסמה)" value="${escapeHtml(f.label || '')}" />
+        <button type="button" class="fld-secret ${f.secret ? 'on' : ''}" data-secret="${i}" aria-label="${f.secret ? 'שדה מוסתר' : 'הצגה גלויה'}" title="הסתרה — יוצג רק בלחיצה">${svg(f.secret ? 'eyeOff' : 'eye')}</button>
+        <button type="button" class="row-del" data-del-field="${i}" aria-label="הסרה">${svg('trash')}</button>
+      </div>
+      <input type="text" class="nfield-value" data-i="${i}" dir="auto" placeholder="ערך" value="${escapeHtml(f.value || '')}" autocapitalize="off" autocorrect="off" spellcheck="false" />
     </div>`).join('');
 }
 function renderNoteChecklist() {
@@ -2320,8 +2349,8 @@ function bind() {
     const y = e.target.closest('button[data-yr]');
     if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); return; }
   });
-  // The vacation card moved to the reports page, and its button with it.
-  $('absenceBody').addEventListener('click', (e) => {
+  $('reportTabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) setReportTab(b.dataset.tab); });
+  $('reportBody').addEventListener('click', (e) => {
     if (e.target.closest('#markVacBtn')) openVacQuick('vacation');
     else if (e.target.closest('#markSickBtn')) openVacQuick('sick');
   });
@@ -2354,6 +2383,7 @@ function bind() {
   $('fEndBtn').onclick = () => openTimePicker({ title: 'שעת יציאה', value: $('fEnd').value, onConfirm: (v) => { setFEnd(v); applyAutoBreak(); updateCalc(); } });
 
   $('fRate').addEventListener('input', updateCalc);
+  $('payPctChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-pct]'); if (b) { setFPayPct(b.dataset.pct); updateCalc(); } });
   $('breakChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-min]'); if (!b) return; breakManuallySet = true; setFBreak(b.dataset.min); updateCalc(); });
   $('typeSeg').addEventListener('click', (e) => { const b = e.target.closest('button[data-type]'); if (b) setFormType(b.dataset.type); });
   $('jobChips').addEventListener('click', (e) => { const b = e.target.closest('button[data-job]'); if (b) { setJobChip(b.dataset.job); updateCalc(); } });
@@ -2488,9 +2518,6 @@ function bind() {
   $('deleteCat').onclick = deleteCurrentCat;
   $('cSwatches').addEventListener('click', (e) => { const b = e.target.closest('[data-swatch]'); if (b) { catPick = b.dataset.swatch; renderSwatches(catPick); } });
 
-  $('weeklyToggle').onclick = () => { weeklyOpen = !weeklyOpen; $('weeklyToggle').setAttribute('aria-expanded', String(weeklyOpen)); $('weeklyBody').hidden = !weeklyOpen; };
-  $('monthlyToggle').onclick = () => { monthlyOpen = !monthlyOpen; $('monthlyToggle').setAttribute('aria-expanded', String(monthlyOpen)); $('monthlyBody').hidden = !monthlyOpen; };
-  $('absenceToggle').onclick = () => { absenceOpen = !absenceOpen; $('absenceToggle').setAttribute('aria-expanded', String(absenceOpen)); $('absenceBody').hidden = !absenceOpen; };
 
   $('settingsBtn').onclick = openSettings;
   $('themeToggle').onclick = toggleTheme;
@@ -2498,7 +2525,11 @@ function bind() {
   $('settingsForm').onsubmit = submitSettings;
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
-  $('sDark').addEventListener('change', () => { store.saveSettings({ theme: $('sDark').checked ? 'dark' : 'light' }); applyTheme(); });
+  // Remember which settings groups are open, per device.
+  $('settingsForm').querySelectorAll('details.set-group').forEach((d) => d.addEventListener('toggle', () => {
+    const cur = uiPrefs.settingsOpen && typeof uiPrefs.settingsOpen === 'object' ? uiPrefs.settingsOpen : { pay: true };
+    setUiPref('settingsOpen', { ...cur, [d.dataset.group]: d.open });
+  }));
   $('sReminder').addEventListener('change', () => {
     const on = $('sReminder').checked;
     $('reminderTimeField').hidden = !on;
@@ -2599,6 +2630,12 @@ function bind() {
   // directly since they hold nothing that can be lost.
   Object.entries(SHEET_GUARDS).forEach(([id, g]) => $(id).addEventListener('click', (e) => { if (e.target.id === id) g.tryClose(); }));
   DIRECT_CLOSE_SHEETS.forEach((id) => $(id).addEventListener('click', (e) => { if (e.target.id === id) closeSheet($(id)); }));
+
+  // A pinned sheet header gets a soft shadow once content scrolls under it.
+  document.querySelectorAll('.sheet').forEach((sh) => {
+    const head = sh.querySelector(':scope > .sheet-head');
+    if (head) sh.addEventListener('scroll', () => head.classList.toggle('scrolled', sh.scrollTop > 24), { passive: true });
+  });
 
   // drag-down-to-dismiss on every bottom sheet
   Object.entries(SHEET_GUARDS).forEach(([id, g]) => enableSheetDrag($(id), { guard: g.isDirty, guarded: g.tryClose, hide: () => closeSheet($(id)) }));

@@ -1,6 +1,6 @@
 // CSV export of a month's entries. UTF‑8 BOM so Hebrew opens correctly in Excel.
 import { MONTHS, TYPE_META, entryType, workedMinutes, fmtHours, decimalHours } from './util.js';
-import { payrollOf, rateOf } from './finance.js';
+import { payrollOf, rateOf, entryPay, payFactor } from './finance.js';
 import { saveFile } from './platform.js';
 
 function esc(v) {
@@ -14,14 +14,15 @@ export function exportCSV({ entries, settings, year, month }) {
     (a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || '')
   );
 
-  const header = ['תאריך', 'סוג', 'התחלה', 'סיום', 'הפסקה (דקות)', 'שעות', 'שכר', 'הערה'];
+  const header = ['תאריך', 'סוג', 'התחלה', 'סיום', 'הפסקה (דקות)', 'שעות', 'שכר', 'אחוז שכר', 'הערה'];
   const rows = sorted.map((e) => {
     const t = entryType(e);
     const isWork = t === 'work';
     const isSick = t === 'sick';
     const mins = isWork ? workedMinutes(e) : (isSick ? p.sickDayHours * 60 : 0);
     const r = rateOf(e, settings);
-    const pay = decimalHours(mins) * r;
+    const pay = isWork ? entryPay(e, settings) : decimalHours(mins) * r;
+    const pct = isWork && payFactor(e) !== 1 ? `${Math.round(payFactor(e) * 100)}%` : '';
     return [
       e.date,
       TYPE_META[t].label,
@@ -30,6 +31,7 @@ export function exportCSV({ entries, settings, year, month }) {
       isWork ? (e.breakMin || 0) : '',
       (isWork || isSick) ? fmtHours(mins) : '',
       (isWork || isSick) && r ? Math.round(pay * 100) / 100 : '',
+      pct,
       e.note || '',
     ].map(esc).join(',');
   });
