@@ -29,7 +29,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v90';
+const APP_VERSION = 'v91';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -355,7 +355,9 @@ function isScheduledWorkday(date) { return isWorkday(date, store.settings); }
 // month's total hours against one combined monthly target — no separate
 // monthly-only calculation needed, and no boundary-week distortion.
 function weeklyGoalBreakdown(entries, y, m) {
-  const daily = dailyHourTarget();
+  // Under a monthly ceiling, every week's goal shrinks by the same share,
+  // so the weeks still add up to the month's target.
+  const daily = dailyHourTarget() * monthQuota(store.settings, y, m).factor;
   const weeks = new Map();
   const weekDays = new Map();
   const excused = new Map(); // week → vacation/sick dates on work days
@@ -473,8 +475,8 @@ function reportOverview(entries, f) {
     // Vacation and sick days are excused, not missing: each one on a work day
     // takes a day off the target, the same way the payroll counts them.
     const excused = new Set(entries.filter((e) => !isWork(e) && isScheduledWorkday(parseDate(e.date))).map((e) => e.date)).size;
-    const goalMin = Math.max(0, Math.round((q.workdays - excused) * q.daily * 60));
-    const cap = `${q.workdays} ימי עבודה${excused ? ` · ${excused} חופשה/מחלה` : ''}`;
+    const goalMin = Math.max(0, Math.round((q.hours - excused * q.daily * q.factor) * 60));
+    const cap = `${q.workdays} ימי עבודה${q.capped ? ` · תקרה ${q.ceiling}` : ''}${excused ? ` · ${excused} חופשה/מחלה` : ''}`;
     goals.push(goalBlock('יעד חודשי', cap, f.totalMin, goalMin));
     if (q.holidays.length) holidayNote = `<p class="rp-note">לא נספרים ביעד: ${q.holidays.map((h) => `${h.name} (${fmtDateShort(h.date)})`).join(', ')}.</p>`;
   }

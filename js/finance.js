@@ -209,7 +209,8 @@ export function grossForMonth(entries, settings, y, m) {
   if (p.payMode === 'global') {
     const base = Number(p.globalSalary) || 0; // the cap — gross never exceeds this, no bonus for extra hours
     const expected = expectedMonthlyHours(settings, y, m);
-    const dailyTarget = dailyHourTargetOf(settings);
+    // Scaled like the report's goals when a monthly ceiling trims the month.
+    const dailyTarget = dailyHourTargetOf(settings) * monthQuota(settings, y, m).factor;
     // Worked + vacation (excused, not a shortfall) + the PAID share of the
     // sick days. A fixed salary is docked for a shortfall, so billing the
     // ladder here is the same thing as paying it: an unpaid first sick day

@@ -102,6 +102,9 @@ export function dailyHourTargetOf(settings) {
 
 // Everything about month (y, m)'s target: its work days, the holidays that
 // fell on what would have been a work day, the daily rate, and the total.
+// The monthly goal (settings.goalHours), when set, is a ceiling: a short
+// month asks for its real work days' worth, a long one never more than it.
+// With no monthly goal the month's own work days are the target.
 export function monthQuota(settings, y, m) {
   const daily = dailyHourTargetOf(settings);
   const off = offDaysOf(settings);
@@ -115,5 +118,9 @@ export function monthQuota(settings, y, m) {
     if (name) holidays.push({ date: toISO(date), name });
     else workdays++;
   }
-  return { daily, workdays, holidays, hours: daily * workdays };
+  const full = daily * workdays;
+  const ceiling = Number(settings && settings.goalHours) || 0;
+  const capped = ceiling > 0 && full > ceiling;
+  // factor scales per-week goals so the weeks still add up to the month.
+  return { daily, workdays, holidays, hours: capped ? ceiling : full, capped, ceiling, factor: capped && full ? ceiling / full : 1 };
 }
