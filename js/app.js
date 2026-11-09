@@ -23,12 +23,13 @@ import {
   entryType, isWork, weekStartISO, weekLabel,
   rawShiftMinutes, suggestedBreakMinutes, DEFAULT_AUTO_BREAK_MIN,
 } from './util.js';
+import { isWorkday, dailyHourTargetOf, monthQuota } from './workdays.js';
 
 const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v89';
+const APP_VERSION = 'v90';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -341,17 +342,10 @@ function fmtDiff(mins) { return `<bdi dir="ltr">${mins < 0 ? '−' : '+'}${fmtHo
 // this, a boundary week could show a false "surplus" for a single day that's
 // actually a shortfall, just because the old math compared it to 1/7 of the
 // full week instead of 1/5 (or however many days you actually work).
-function dailyHourTarget() {
-  const goalW = Number(store.settings.goalWeekHours) || 0;
-  if (!goalW) return 0;
-  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
-  const workDaysPerWeek = Math.max(1, 7 - offDays.length);
-  return goalW / workDaysPerWeek;
-}
-function isScheduledWorkday(date) {
-  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
-  return !offDays.includes(date.getDay());
-}
+// The rate and the work-day test both live in workdays.js, shared with the
+// payroll math, so the report and the payslip always agree on them.
+function dailyHourTarget() { return dailyHourTargetOf(store.settings); }
+function isScheduledWorkday(date) { return isWorkday(date, store.settings); }
 
 // Groups `entries` (already scoped to one month, e.g. via monthEntries()) by
 // ISO week and compares each week's actual hours to what was expected —
@@ -364,29 +358,39 @@ function weeklyGoalBreakdown(entries, y, m) {
   const daily = dailyHourTarget();
   const weeks = new Map();
   const weekDays = new Map();
+  const excused = new Map(); // week → vacation/sick dates on work days
   entries.forEach((e) => {
-    if (!isWork(e)) return;
+    if (!isWork(e)) {
+      // Excused, not missing: a vacation or sick work day comes off that
+      // week's goal — the same credit the monthly target and payroll give.
+      if (!isScheduledWorkday(parseDate(e.date))) return;
+      const wk = weekStartISO(parseDate(e.date));
+      if (!excused.has(wk)) excused.set(wk, new Set());
+      excused.get(wk).add(e.date);
+      return;
+    }
     const wk = weekStartISO(parseDate(e.date));
     weeks.set(wk, (weeks.get(wk) || 0) + workedMinutes(e));
     if (!weekDays.has(wk)) weekDays.set(wk, new Set());
     weekDays.get(wk).add(e.date);
   });
-  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
-  const fullWeekDays = Math.max(1, 7 - offDays.length);
   return [...weeks.entries()].filter(([, mins]) => mins > 0).sort((a, b) => a[0].localeCompare(b[0])).map(([wk, mins]) => {
-    let scheduledDaysInMonth = 0;
+    let scheduledDaysInMonth = 0, outsideMonth = false;
     const start = parseDate(wk);
     for (let i = 0; i < 7; i++) {
       const d = new Date(start); d.setDate(start.getDate() + i);
-      if (d.getFullYear() === y && d.getMonth() === m && isScheduledWorkday(d)) scheduledDaysInMonth++;
+      if (d.getFullYear() !== y || d.getMonth() !== m) { outsideMonth = true; continue; }
+      if (isScheduledWorkday(d)) scheduledDaysInMonth++;
     }
     const hasGoal = daily > 0;
-    const goalMins = hasGoal ? Math.round(daily * 60 * scheduledDaysInMonth) : 0;
+    const exc = excused.has(wk) ? excused.get(wk).size : 0;
+    const goalMins = hasGoal ? Math.round(daily * 60 * Math.max(0, scheduledDaysInMonth - exc)) : 0;
     const diffMins = hasGoal ? mins - goalMins : 0;
     const days = weekDays.get(wk) ? weekDays.get(wk).size : 0;
     // A week the month boundary cuts through is judged only on its days
-    // inside this month — say so, or a short goal looks like a mistake.
-    const partial = scheduledDaysInMonth < fullWeekDays;
+    // inside this month — say so, or a short goal looks like a mistake. (A
+    // holiday week is short too, but that's not "partial": the goal is whole.)
+    const partial = outsideMonth;
     return { wk, mins, days, scheduledDaysInMonth, partial, hasGoal, goalMins, diffMins };
   });
 }
@@ -442,12 +446,12 @@ function renderReport(entries) {
 const rpRow = (k, v, cls = '') => `<div class="rp-row${cls ? ' ' + cls : ''}"><span class="rp-k">${k}</span><span class="rp-v">${v}</span></div>`;
 
 // A goal as a labelled bar: what's done, out of what, and what's left.
-function goalBlock(title, caption, doneMin, goalH) {
-  const pct = Math.round((doneMin / 60 / goalH) * 100);
-  const remain = Math.max(0, goalH * 60 - doneMin);
+function goalBlock(title, caption, doneMin, goalMin) {
+  const pct = goalMin > 0 ? Math.round((doneMin / goalMin) * 100) : 100;
+  const remain = Math.max(0, goalMin - doneMin);
   const done = pct >= 100;
   return `<div class="rp-goal${done ? ' done' : ''}">
-    <div class="rp-goal-top"><span class="rp-goal-title">${title}<small>${caption}</small></span><span class="rp-goal-val"><b>${fmtHours(doneMin)}</b> / ${goalH} ש׳</span></div>
+    <div class="rp-goal-top"><span class="rp-goal-title">${title}<small>${caption}</small></span><span class="rp-goal-val"><b>${fmtHours(doneMin)}</b> / ${fmtHours(goalMin)} ש׳</span></div>
     <div class="rp-bar"><span style="width:${Math.min(100, pct)}%"></span></div>
     <div class="rp-goal-sub">${done ? `<span class="pos">היעד הושלם ✓</span>` : `<span>נותרו ${fmtHours(remain)} ש׳</span>`}<span>${pct}%</span></div>
   </div>`;
@@ -459,13 +463,29 @@ function reportOverview(entries, f) {
   const parts = [];
 
   // goals
-  const goalM = Number(s.goalHours) || 0, goalW = Number(s.goalWeekHours) || 0;
+  const goalW = Number(s.goalWeekHours) || 0;
   const today = new Date();
   const isCurrent = viewYear === today.getFullYear() && viewMonth === today.getMonth();
   const goals = [];
-  if (goalM > 0) goals.push(goalBlock('יעד חודשי', `${MONTHS[viewMonth]}`, f.totalMin, goalM));
-  if (goalW > 0 && isCurrent) goals.push(goalBlock('השבוע', weekLabel(weekStartISO(today)), currentWeekMinutes(), goalW));
-  if (goals.length) parts.push(`<div class="rp-sec">${goals.join('')}</div>`);
+  const q = monthQuota(s, viewYear, viewMonth);
+  let holidayNote = '';
+  if (q.daily > 0) {
+    // Vacation and sick days are excused, not missing: each one on a work day
+    // takes a day off the target, the same way the payroll counts them.
+    const excused = new Set(entries.filter((e) => !isWork(e) && isScheduledWorkday(parseDate(e.date))).map((e) => e.date)).size;
+    const goalMin = Math.max(0, Math.round((q.workdays - excused) * q.daily * 60));
+    const cap = `${q.workdays} ימי עבודה${excused ? ` · ${excused} חופשה/מחלה` : ''}`;
+    goals.push(goalBlock('יעד חודשי', cap, f.totalMin, goalMin));
+    if (q.holidays.length) holidayNote = `<p class="rp-note">לא נספרים ביעד: ${q.holidays.map((h) => `${h.name} (${fmtDateShort(h.date)})`).join(', ')}.</p>`;
+  }
+  if (goalW > 0 && isCurrent) {
+    // This week's goal, less any holiday in it — a Sukkot week asks for less.
+    const start = parseDate(weekStartISO(today));
+    let days = 0;
+    for (let i = 0; i < 7; i++) { const d = new Date(start); d.setDate(start.getDate() + i); if (isScheduledWorkday(d)) days++; }
+    goals.push(goalBlock('השבוע', weekLabel(weekStartISO(today)), currentWeekMinutes(), Math.round(days * dailyHourTarget() * 60)));
+  }
+  if (goals.length) parts.push(`<div class="rp-sec">${goals.join('')}${holidayNote}</div>`);
 
   // days
   const pill = (n, label, cls) => `<div class="rp-day ${cls}${n ? '' : ' zero'}"><b>${n}</b><span>${label}</span></div>`;
@@ -1108,7 +1128,7 @@ let settingsFormSnapshot = '';
 // reminder-time already save immediately on change, so closing the sheet never
 // loses them.
 function serializeSettingsForm() {
-  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, ab: $('sAutoBreak').value, od: [...offDaysPick].sort() });
+  return JSON.stringify({ n: $('sName').value, r: $('sRate').value, g: $('sGoal').value, gw: $('sGoalWeek').value, sr: $('sShiftRemind').value, sm: $('sShiftMax').value, ab: $('sAutoBreak').value, od: [...offDaysPick].sort(), ho: $('sHolidaysOff').checked });
 }
 function isSettingsDirty() { return serializeSettingsForm() !== settingsFormSnapshot; }
 // The "שכחתי לצאת" hours are edited with a −/+ stepper, backed by a hidden
@@ -1132,6 +1152,7 @@ function openSettings() {
   setStepper('sAutoBreak', s.autoBreakMin != null ? s.autoBreakMin : DEFAULT_AUTO_BREAK_MIN);
   offDaysPick = Array.isArray(s.offDays) ? [...s.offDays] : [];
   renderOffDaysChips();
+  $('sHolidaysOff').checked = s.holidaysOff !== false;
   renderPaletteRow();
   renderJobsList();
   renderSyncStatus();
@@ -1300,7 +1321,7 @@ function submitSettings(ev) {
     name: $('sName').value.trim(), rate: Number($('sRate').value) || 0,
     goalHours: Number($('sGoal').value) || 0, goalWeekHours: Number($('sGoalWeek').value) || 0,
     reminder: $('sReminder').checked, reminderTime: reminderPick,
-    offDays: [...offDaysPick].sort(),
+    offDays: [...offDaysPick].sort(), holidaysOff: $('sHolidaysOff').checked,
     autoBreakMin: Math.min(120, Math.max(0, Math.round(Number($('sAutoBreak').value)) || 0)),
     ...shiftHoursFromForm(),
   });
@@ -1321,7 +1342,7 @@ function reminderDue() {
   if (!s.reminder) return false;
   if (todayCount() > 0 || getActive()) return false; // already logged / clocked in
   const now = new Date();
-  if (Array.isArray(s.offDays) && s.offDays.includes(now.getDay())) return false; // marked as a non-work day
+  if (!isWorkday(now, s)) return false; // non-work weekday or a holiday
   const [h, m] = (s.reminderTime || '18:00').split(':').map(Number);
   return now.getHours() * 60 + now.getMinutes() >= (h || 0) * 60 + (m || 0);
 }
@@ -1780,15 +1801,14 @@ const VQ_TEXT = {
 };
 function fmtDateShort(iso) { const d = parseDate(iso); return `${d.getDate()} ב${MONTHS[d.getMonth()]}`; }
 // Walks forward from startISO collecting `days` calendar dates, optionally
-// skipping weekdays marked as non-work (settings.offDays) — a vacation day
+// skipping days that aren't work days anyway (off weekdays, holidays) — a vacation day
 // only "counts" on a day you'd otherwise have worked. Capped at a 90-day
 // lookahead so an all-days-off configuration can't loop forever.
 function computeVacDates(startISO, days, skipOff) {
-  const offDays = Array.isArray(store.settings.offDays) ? store.settings.offDays : [];
   const dates = [];
   let d = parseDate(startISO), guard = 0;
   while (dates.length < days && guard < 90) {
-    if (!(skipOff && offDays.includes(d.getDay()))) dates.push(toISO(d));
+    if (!(skipOff && !isScheduledWorkday(d))) dates.push(toISO(d));
     d = new Date(d); d.setDate(d.getDate() + 1);
     guard++;
   }

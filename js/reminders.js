@@ -16,6 +16,8 @@
 // plan() is pure — no plugin, no clock, no storage — so every rule below can
 // be checked without a phone.
 
+import { isWorkday } from './workdays.js';
+
 export const PLAN_DAYS = 30;
 
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -71,12 +73,11 @@ export function plan({ settings = {}, entries = [], notes = [], activeShift = nu
   // ---- 1. the daily "you haven't logged anything today" reminder ----
   if (settings.reminder) {
     const time = hhmm(settings.reminderTime, '18:00');
-    const offDays = Array.isArray(settings.offDays) ? settings.offDays : [];
     const datesWithEntries = new Set(entries.filter((e) => e && e.date).map((e) => e.date));
     for (let i = 0; i <= days; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
-      if (offDays.includes(d.getDay())) continue;
+      if (!isWorkday(d, settings)) continue; // off weekday or holiday
       const dISO = iso(d);
       // Already logged that day — the reminder would be nagging about work
       // that's already recorded. Only ever true for today and the past, but
