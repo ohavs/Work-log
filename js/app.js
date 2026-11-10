@@ -431,9 +431,22 @@ function renderStats(f) {
   if (f.anyRate) $('statPay').textContent = fmtMoney(f.totalPay, store.settings.currency);
 }
 
+// The card can fold down to just the headline numbers; remembered per device.
+function reportCollapsed() { return uiPrefs.reportCollapsed === true; }
+function applyReportCollapse() {
+  const c = reportCollapsed();
+  $('reportCard').classList.toggle('collapsed', c);
+  $('reportMore').hidden = c;
+  const t = $('reportToggle');
+  t.setAttribute('aria-expanded', String(!c));
+  t.setAttribute('aria-label', c ? 'הצגת הפירוט' : 'הסתרת הפירוט');
+  t.innerHTML = `<span>${c ? 'פירוט' : 'הסתרה'}</span>${svg('chevDown')}`;
+}
+
 function renderReport(entries) {
   const f = monthFacts(entries);
   renderStats(f);
+  applyReportCollapse();
   const tab = reportTab();
   $('reportTabs').querySelectorAll('button[data-tab]').forEach((b) => {
     const on = b.dataset.tab === tab;
@@ -453,7 +466,8 @@ function goalBlock(title, caption, doneMin, goalMin) {
   const remain = Math.max(0, goalMin - doneMin);
   const done = pct >= 100;
   return `<div class="rp-goal${done ? ' done' : ''}">
-    <div class="rp-goal-top"><span class="rp-goal-title">${title}<small>${caption}</small></span><span class="rp-goal-val"><b>${fmtHours(doneMin)}</b> / ${fmtHours(goalMin)} ש׳</span></div>
+    <div class="rp-goal-top"><span class="rp-goal-title">${title}</span><span class="rp-goal-val"><b>${fmtHours(doneMin)}</b> / ${fmtHours(goalMin)} ש׳</span></div>
+    ${caption ? `<div class="rp-goal-cap">${caption}</div>` : ''}
     <div class="rp-bar"><span style="width:${Math.min(100, pct)}%"></span></div>
     <div class="rp-goal-sub">${done ? `<span class="pos">היעד הושלם ✓</span>` : `<span>נותרו ${fmtHours(remain)} ש׳</span>`}<span>${pct}%</span></div>
   </div>`;
@@ -492,17 +506,6 @@ function reportOverview(entries, f) {
   // days
   const pill = (n, label, cls) => `<div class="rp-day ${cls}${n ? '' : ' zero'}"><b>${n}</b><span>${label}</span></div>`;
   parts.push(`<div class="rp-days">${pill(f.workDays, 'עבודה', 'work')}${pill(f.vacDays, 'חופשה', 'vac')}${pill(f.sickDays, 'מחלה', 'sick')}</div>`);
-
-  // hours facts
-  const rows = [];
-  if (f.workDays) rows.push(rpRow('ממוצע ליום עבודה', `${fmtHours(Math.round(f.totalMin / f.workDays))} ש׳`));
-  const weekRows = weeklyGoalBreakdown(entries, viewYear, viewMonth);
-  if (weekRows.some((r) => r.hasGoal)) {
-    const diff = weekRows.reduce((acc, r) => acc + r.diffMins, 0);
-    rows.push(rpRow('מאזן מול היעד השבועי', `<span class="${diff >= 0 ? 'pos' : 'neg'}">${fmtDiff(diff)} ש׳</span>`));
-  }
-  if (f.g.premiumHours) rows.push(rpRow('שעות ב-200%', `${fmtHours(Math.round(f.g.premiumHours * 60))} ש׳`));
-  if (rows.length) parts.push(`<div class="rp-list">${rows.join('')}</div>`);
 
   // pay breakdown — where the month's money comes from
   if (f.anyRate) {
@@ -2371,6 +2374,7 @@ function bind() {
     const y = e.target.closest('button[data-yr]');
     if (y) { viewYear += Number(y.dataset.yr); renderMonth(); renderAll(); renderMore(); return; }
   });
+  $('reportToggle').addEventListener('click', () => { setUiPref('reportCollapsed', !reportCollapsed()); applyReportCollapse(); });
   $('reportTabs').addEventListener('click', (e) => { const b = e.target.closest('button[data-tab]'); if (b) setReportTab(b.dataset.tab); });
   $('reportBody').addEventListener('click', (e) => {
     if (e.target.closest('#markVacBtn')) openVacQuick('vacation');

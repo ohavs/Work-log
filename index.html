@@ -85,12 +85,15 @@
           <div class="stat"><span class="stat-value" id="statDays">0</span><span class="stat-label">ימי עבודה</span></div>
           <div class="stat stat-pay" id="statPayCard"><span class="stat-value" id="statPay">₪0</span><span class="stat-label">שכר</span></div>
         </div>
+        <button type="button" class="rc-toggle" id="reportToggle" aria-controls="reportMore" aria-expanded="true" aria-label="הסתרת הפירוט"></button>
+        <div class="rc-more" id="reportMore">
         <div class="rc-tabs" id="reportTabs" role="tablist">
           <button type="button" role="tab" data-tab="overview">סיכום</button>
           <button type="button" role="tab" data-tab="weeks">שבועות</button>
           <button type="button" role="tab" data-tab="absence">חופשה ומחלה</button>
         </div>
         <div class="rc-body" id="reportBody"></div>
+        </div>
       </section>
 
       <div class="list-head">
