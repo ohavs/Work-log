@@ -1,150 +1,102 @@
-// Google Play images: phone screenshots (1080x1920 JPEG), the feature graphic (1024x500 JPEG) and the icon
-// (512 PNG), into store/listing/<locale>/images (fastlane layout), for iw-IL and en-US.
+// Google Play images: phone screenshots (1080x1920 JPEG) and the feature graphic (1024x500 JPEG), into
+// store/listing/<locale>/images (fastlane layout).
 //
-// Style: the brutalist look of ohavs/Currency-26's listing, in this app's colours: one flat colour per
-// screenshot, a dark ink for frames and hard offset shadows, a giant headline whose payoff sits in a solid block,
-// a tilted phone and a sticker with a fact that is true for the app today.
+// Style ("night shift"): a deep teal night with soft orange and teal glows, a centred headline whose key words are
+// orange, an upright phone that runs off the bottom edge, and one piece of its screen lifted out and magnified
+// beside it, so the point of each screenshot reads even as a thumbnail. Deliberately unlike Currency's listing.
 //
-// The app screens come from tools/store/capture.mjs (tools/store/out/*.png). Fonts come from npm (@fontsource)
-// into tools/store/.fonts.
+// The app screens come from tools/store/capture.mjs (tools/store/out/*.png, 400x860 CSS px at x2.7).
 //
 //   node tools/store/capture.mjs && node tools/store/screenshots.mjs
 import { createRequire } from 'node:module';
-import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { FONT_CSS } from '../icons/options.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SRC = path.join(ROOT, 'tools/store/out');
 const OUT = path.join(ROOT, 'store/listing');
-const FONTS = path.join(ROOT, 'tools/store/.fonts');
+const shot = (name) => 'data:image/png;base64,' + fs.readFileSync(path.join(SRC, `${name}.png`)).toString('base64');
 
-function fontsource(pkg) {
-  const dir = path.join(FONTS, pkg);
-  if (!fs.existsSync(path.join(dir, 'package'))) {
-    fs.mkdirSync(dir, { recursive: true });
-    const tgz = execSync(`npm pack @fontsource/${pkg} --silent`, { cwd: dir }).toString().trim().split('\n').pop();
-    execSync(`tar xzf ${tgz} && rm ${tgz}`, { cwd: dir });
-  }
-  return path.join(dir, 'package/files');
-}
-const font = (family, file, weight) => `@font-face{font-family:'${family}';font-weight:${weight};src:url('file://${file}') format('woff2')}`;
-const FONT_CSS = (() => {
-  const so = fontsource('secular-one'), ru = fontsource('rubik');
-  return [
-    font('Head', `${so}/secular-one-hebrew-400-normal.woff2`, 400), font('Head', `${so}/secular-one-latin-400-normal.woff2`, 400),
-    font('Body', `${ru}/rubik-hebrew-800-normal.woff2`, 800), font('Body', `${ru}/rubik-latin-800-normal.woff2`, 800),
-  ].join('\n');
-})();
-
-const uri = (file, type = 'image/png') => `data:${type};base64,` + fs.readFileSync(file).toString('base64');
-const shot = (name) => uri(path.join(SRC, `${name}.png`));
-
-const INK = '#0F2A2A';
-// Teal and orange are the app's default palette (js/app.js PALETTES.teal); cream and the darks sit beside them.
-const LOOKS = [
-  { bg: '#14B8A6', fg: INK, blockBg: INK, blockFg: '#D7F7F1', sticker: '#FDBA74' },
-  { bg: '#FDBA74', fg: INK, blockBg: '#0D9488', blockFg: '#FFFFFF', sticker: '#FFFFFF' },
-  { bg: '#FFF4E6', fg: INK, blockBg: '#EA580C', blockFg: '#FFFFFF', sticker: '#5EEAD4' },
-  { bg: '#0D9488', fg: '#FFFFFF', blockBg: '#FDBA74', blockFg: INK, sticker: '#FFFFFF' },
-  { bg: '#99F6E4', fg: INK, blockBg: INK, blockFg: '#99F6E4', sticker: '#FDBA74' },
-  { bg: INK, fg: '#FFFFFF', blockBg: '#14B8A6', blockFg: INK, sticker: '#FDBA74' },
-];
-
-// Headlines are two beats: plain words, then the payoff in a block. Stickers are facts that are true today.
+const ORANGE = '#FB923C';
+// Each screenshot: the capture, a headline (orange words in *stars*), a line under it, and the magnified piece
+// (x, y, w, h in the capture's CSS px) with where it floats (top in the page, side).
 const COPY = {
   'iw-IL': {
     rtl: true,
     shots: [
-      { img: 'home_active', h: ['כניסה ויציאה', 'בלחיצה אחת.'], st: 'השעה נקלטת לבד' },
-      { img: 'reports', h: ['כל השעות והשכר', 'בדוח אחד.'], st: 'ייצוא ל־PDF ו־CSV' },
-      { img: 'reports_weeks', h: ['יעד שבועי וחודשי.', 'תמיד מול העיניים.'], st: 'חופשה ומחלה נספרות' },
-      { img: 'more', h: ['נטו, פנסיה ושעות נוספות.', 'מחושב לבד.'], st: 'הערכה לפי החוק בישראל' },
-      { img: 'notes', h: ['כל מה שצריך בעבודה.', 'בפנקס אחד.'], st: 'טלפונים, קודים, משימות' },
-      { img: 'home_dark', h: ['בהיר או כהה.', 'מסונכרן בענן.'], st: 'גם בלי אינטרנט' },
+      { img: 'home_active', h: 'כניסה ויציאה\n*בלחיצה אחת*', sub: 'התאריך והשעה נקלטים לבד', zoom: [60, 150, 280, 112], at: 1240, side: 'end' },
+      { img: 'reports', h: 'השעות והשכר\n*של כל החודש*', sub: 'דוח מוכן, עם ייצוא ל־PDF ול־CSV', zoom: [5, 125, 390, 90], at: 1080, side: 'start' },
+      { img: 'reports_weeks', h: 'יעד שבועי וחודשי\n*תמיד מול העיניים*', sub: 'כמה עשית וכמה נשאר', zoom: [15, 298, 370, 74], at: 1160, side: 'end' },
+      { img: 'more', h: 'כמה נכנס\n*נטו לבנק*', sub: 'הערכת תלוש, פנסיה ושעות נוספות', zoom: [10, 140, 380, 112], at: 1100, side: 'start' },
+      { img: 'notes', h: 'כל מה שצריך בעבודה\n*בפנקס אחד*', sub: 'טלפונים, קודים ורשימות משימות', zoom: [10, 222, 380, 192], at: 1200, side: 'end' },
+      { img: 'home_dark', h: 'בהיר או כהה\n*מסונכרן בענן*', sub: 'עובד גם בלי אינטרנט', zoom: null },
     ],
-    feature: ['שעות העבודה והשכר שלך.', 'בלחיצה אחת.'],
-  },
-  'en-US': {
-    rtl: false,
-    shots: [
-      { img: 'home_active', h: ['Clock in and out', 'with one tap.'], st: 'Time is logged for you' },
-      { img: 'reports', h: ['Every hour, every shekel.', 'One report.'], st: 'Export to PDF and CSV' },
-      { img: 'reports_weeks', h: ['Weekly and monthly goals.', 'Always in view.'], st: 'Vacation and sick days count' },
-      { img: 'more', h: ['Net pay, pension, overtime.', 'Calculated for you.'], st: 'Estimated per Israeli law' },
-      { img: 'notes', h: ['All your work notes.', 'One notebook.'], st: 'Phones, codes, checklists' },
-      { img: 'home_dark', h: ['Light or dark.', 'Cloud synced.'], st: 'Works offline' },
-    ],
-    feature: ['Your work hours and pay.', 'One tap.'],
+    feature: { h: 'שעות העבודה והשכר שלך\n*בלחיצה אחת*' },
   },
 };
 
 const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+const headline = (t) => esc(t).replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
 
-function screenshotHtml(c, s, look, i) {
-  const rtl = c.rtl, side = rtl ? 'right' : 'left', other = rtl ? 'left' : 'right';
-  const tilt = (i % 2 ? 1 : -1) * 3;
-  const long = Math.max(...s.h.map((t) => t.length));
-  const size = rtl ? (long > 22 ? 84 : long > 17 ? 96 : 112) : (long > 24 ? 76 : long > 17 ? 86 : 100);
-  return `<!doctype html><html dir="${rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${FONT_CSS}
+const BASE = `${FONT_CSS}
   *{box-sizing:border-box;margin:0}
-  body{width:1080px;height:1920px;overflow:hidden;background:${look.bg};color:${look.fg};font-family:${rtl ? "'Head'" : "'Body'"},sans-serif;font-weight:${rtl ? 400 : 800};position:relative}
-  .h{position:absolute;top:110px;${side}:80px;${other}:60px;font-size:${size}px;line-height:1.12;text-align:start}
-  .h span{display:block}
-  .h .block{display:inline-block;margin-top:14px;padding:4px 30px 14px;background:${look.blockBg};color:${look.blockFg};border:6px solid ${INK};
-    box-shadow:${rtl ? -12 : 12}px 12px 0 ${INK};transform:rotate(${rtl ? 1.5 : -1.5}deg)}
-  .phone{position:absolute;top:560px;left:50%;width:720px;margin-left:-360px;transform:rotate(${tilt}deg);background:${INK};border:10px solid ${INK};
-    padding:14px;border-radius:70px;box-shadow:26px 26px 0 ${look.fg === INK ? INK : '#000'}}
-  .screen{border-radius:48px;overflow:hidden;height:1500px;background:#fff}
-  .screen img{width:100%;display:block}
-  .sticker{position:absolute;top:500px;${other}:40px;z-index:2;font-family:'Body','Head',sans-serif;font-weight:800;font-size:44px;padding:18px 30px;
-    background:${look.sticker};color:${INK};border:5px solid ${INK};border-radius:999px;box-shadow:8px 8px 0 ${INK};transform:rotate(${rtl ? -6 : 6}deg);white-space:nowrap}
+  body{overflow:hidden;position:relative;color:#fff;font-family:R,sans-serif;font-weight:900;
+    background:radial-gradient(900px 700px at 85% 8%, #F9731633, transparent 70%),
+      radial-gradient(1000px 900px at 0% 70%, #14B8A640, transparent 70%), linear-gradient(170deg,#0E4F4A,#062523 70%)}
+  em{font-style:normal;color:${ORANGE}}`;
+
+function screenshotHtml(c, s) {
+  const PHONE_W = 700, SCREEN_W = PHONE_W - 2 * 18, k = SCREEN_W / 400; // capture CSS px -> page px inside the phone
+  let zoom = '';
+  if (s.zoom) {
+    const [x, y, w, h] = s.zoom, z = 2.15, side = (s.side === 'start') === c.rtl ? 'right' : 'left';
+    // The lifted piece: the same capture, scaled up and clipped to the rectangle.
+    zoom = `<div class="zoom" style="${side}:46px;top:${s.at}px;width:${w * z}px;height:${h * z}px;
+      background:url('${shot(s.img)}') ${-x * z}px ${-y * z}px/${400 * z}px auto no-repeat"></div>`;
+  }
+  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${BASE}
+  body{width:1080px;height:1920px}
+  .h{position:absolute;top:120px;left:60px;right:60px;text-align:center;font-size:104px;line-height:1.1;letter-spacing:-1px}
+  .sub{position:absolute;top:385px;left:60px;right:60px;text-align:center;font-size:44px;font-weight:700;color:#CCFBF1;opacity:.9}
+  .phone{position:absolute;top:520px;left:50%;margin-left:-${PHONE_W / 2}px;width:${PHONE_W}px;height:1600px;background:#0A0F0F;border-radius:92px;padding:18px;
+    box-shadow:0 0 0 3px #2B4B48, 0 40px 120px #000a, 0 0 140px #14B8A630}
+  .screen{width:100%;height:100%;border-radius:76px;overflow:hidden;background:url('${shot(s.img)}') 0 0/${SCREEN_W}px auto no-repeat}
+  .zoom{position:absolute;z-index:2;border-radius:34px;background-color:#fff;box-shadow:0 30px 70px #000b, 0 0 0 8px #ffffff22;outline:4px solid ${ORANGE};outline-offset:10px}
   </style></head><body>
-  <div class="h"><span>${esc(s.h[0])}</span><span class="block">${esc(s.h[1])}</span></div>
-  <div class="sticker">${esc(s.st)}</div>
-  <div class="phone"><div class="screen"><img src="${shot(s.img)}"></div></div>
+  <div class="h">${headline(s.h)}</div>
+  <div class="sub">${esc(s.sub)}</div>
+  <div class="phone"><div class="screen"></div></div>
+  ${zoom}
   </body></html>`;
 }
 
 function featureHtml(c) {
-  const rtl = c.rtl, side = rtl ? 'right' : 'left';
-  const icon = uri(path.join(ROOT, 'icons/icon-512.png'));
-  return `<!doctype html><html dir="${rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${FONT_CSS}
-  *{box-sizing:border-box;margin:0}
-  body{width:1024px;height:500px;overflow:hidden;background:#14B8A6;color:${INK};font-family:${rtl ? "'Head'" : "'Body'"},sans-serif;font-weight:${rtl ? 400 : 800};position:relative}
-  .t{position:absolute;top:0;bottom:0;${side}:64px;width:540px;font-size:58px;line-height:1.15;display:flex;flex-direction:column;justify-content:center;align-items:flex-start}
-  .t .block{display:inline-block;margin-top:14px;padding:2px 24px 10px;background:${INK};color:#D7F7F1;border:5px solid ${INK};
-    box-shadow:${rtl ? -10 : 10}px 10px 0 #0D5E57;transform:rotate(${rtl ? 1.5 : -1.5}deg)}
-  .icon{position:absolute;top:110px;${rtl ? 'left' : 'right'}:90px;width:270px;height:270px;border:8px solid ${INK};border-radius:72px;
-    box-shadow:18px 18px 0 ${INK};transform:rotate(${rtl ? -6 : 6}deg);background:url('${icon}') center/112% no-repeat}
-  </style></head><body>
-  <div class="t"><span>${esc(c.feature[0])}</span><span class="block">${esc(c.feature[1])}</span></div>
-  <div class="icon"></div>
-  </body></html>`;
+  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${BASE}
+  body{width:1024px;height:500px}
+  .h{position:absolute;top:0;bottom:0;${c.rtl ? 'right' : 'left'}:70px;width:560px;display:flex;align-items:center;font-size:64px;line-height:1.15}
+  .phone{position:absolute;top:70px;${c.rtl ? 'left' : 'right'}:90px;width:280px;height:600px;background:#0A0F0F;border-radius:40px;padding:9px;
+    box-shadow:0 0 0 2px #2B4B48, 0 20px 60px #000a;transform:rotate(${c.rtl ? -8 : 8}deg)}
+  .screen{width:100%;height:100%;border-radius:32px;overflow:hidden;background:url('${shot('home_active')}') 0 0/262px auto no-repeat}
+  </style></head><body><div class="h"><div>${headline(c.feature.h)}</div></div><div class="phone"><div class="screen"></div></div></body></html>`;
 }
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
+const render = async (html, w, h, file) => {
+  await page.setViewportSize({ width: w, height: h });
+  await page.setContent(html, { waitUntil: 'load' });
+  await page.evaluate(async () => { await document.fonts.load('900 50px R', 'אבג'); await document.fonts.load('700 50px R', 'abc'); });
+  await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
+};
 for (const [locale, c] of Object.entries(COPY)) {
   const dir = path.join(OUT, locale, 'images');
   fs.rmSync(path.join(dir, 'phoneScreenshots'), { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, 'phoneScreenshots'), { recursive: true });
-  for (const [i, s] of c.shots.entries()) {
-    await page.setViewportSize({ width: 1080, height: 1920 });
-    await page.setContent(screenshotHtml(c, s, LOOKS[i], i), { waitUntil: 'load' });
-    await page.evaluate(() => document.fonts.ready);
-    await page.screenshot({ path: path.join(dir, 'phoneScreenshots', `${i + 1}.jpg`), type: 'jpeg', quality: 92 });
-  }
-  await page.setViewportSize({ width: 1024, height: 500 });
-  await page.setContent(featureHtml(c), { waitUntil: 'load' });
-  await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: path.join(dir, 'featureGraphic.jpg'), type: 'jpeg', quality: 92 });
+  for (const [i, s] of c.shots.entries()) await render(screenshotHtml(c, s), 1080, 1920, path.join(dir, 'phoneScreenshots', `${i + 1}.jpg`));
+  await render(featureHtml(c), 1024, 500, path.join(dir, 'featureGraphic.jpg'));
 }
-// The icon: full bleed (Play rounds the corners itself), the clock a little larger than in the maskable icon.
-await page.setViewportSize({ width: 512, height: 512 });
-await page.setContent(`<body style="margin:0;width:512px;height:512px;background:url('${uri(path.join(ROOT, 'icons/icon-maskable-512.png'))}') center/122% no-repeat">`);
-for (const locale of Object.keys(COPY)) await page.screenshot({ path: path.join(OUT, locale, 'images/icon.png') });
 await browser.close();
 console.log('saved to', OUT);
