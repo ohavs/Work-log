@@ -1,5 +1,5 @@
 // Service worker — offline-first for the app shell.
-const CACHE = 'worklog-v92';
+const CACHE = 'worklog-v93';
 const SHELL = [
   './',
   './index.html',
@@ -15,7 +15,6 @@ const SHELL = [
   './js/config.js',
   './js/storage.js',
   './js/platform.js',
-  './js/update.js',
   './js/reminders.js',
   './js/workdays.js',
   './js/vendor/jspdf.umd.min.js',

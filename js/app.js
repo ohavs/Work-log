@@ -10,7 +10,6 @@ import {
 } from './finance.js';
 import { uid } from './util.js';
 import { storage, setStorageDriver, migrateStorage, localDriver } from './storage.js';
-import { checkForUpdate, downloadAndInstall, openInstallSettings, fmtSize } from './update.js';
 import {
   saveFile, notify, haptic, onAppPause, isNative, onBackButton, initNativeShell,
   setStatusBarTheme, nativeStorageDriver, notificationPermission,
@@ -29,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v92';
+const APP_VERSION = 'v93';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1297,7 +1296,7 @@ function updateAccountUI() {
     btn.classList.add('synced');
     btn.setAttribute('aria-label', 'החשבון שלי — ' + (u.name || ''));
     btn.innerHTML = u.photo
-      ? `<img class="avatar" src="${u.photo}" referrerpolicy="no-referrer" alt="">`
+      ? `<img class="avatar" src="${escapeHtml(u.photo)}" referrerpolicy="no-referrer" alt="">`
       : `<span class="avatar-initial">${escapeHtml((u.name || '?').trim().charAt(0) || '?')}</span>`;
     if (sessionStorage.getItem('wl_signin_pending')) {
       sessionStorage.removeItem('wl_signin_pending');
@@ -1576,11 +1575,35 @@ function runBackupExport() {
   } catch (e) { console.error(e); toast('שגיאה בייצוא הגיבוי'); }
 }
 
+// A backup file is outside data: keep only records shaped like ours, so a
+// hand-edited or foreign file can't put odd types (objects where text goes,
+// ids that aren't strings) into the store and from there into the cloud.
+function sanitizeBackup(data) {
+  const obj = (x) => x && typeof x === 'object' && !Array.isArray(x);
+  const recs = (a) => (Array.isArray(a) ? a.filter((x) => obj(x) && typeof x.id === 'string' && x.id) : []);
+  const stamps = (m) => {
+    const out = {};
+    if (obj(m)) for (const k in m) if (Number.isFinite(Number(m[k]))) out[k] = Number(m[k]);
+    return out;
+  };
+  const entries = recs(data.entries).filter((e) => typeof e.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(e.date));
+  const t = obj(data.tombstones) ? data.tombstones : {};
+  return {
+    ...data,
+    entries,
+    notes: recs(data.notes),
+    noteCats: recs(data.noteCats),
+    settings: obj(data.settings) ? data.settings : null,
+    tombstones: { e: stamps(t.e), n: stamps(t.n), c: stamps(t.c) },
+  };
+}
+
 async function runBackupImport(file) {
   let data;
   try { data = JSON.parse(await file.text()); }
   catch { toast('הקובץ אינו קובץ JSON תקין'); return; }
   if (!data || data.app !== 'work-log' || !Array.isArray(data.entries)) { toast('זה לא קובץ גיבוי של האפליקציה'); return; }
+  data = sanitizeBackup(data);
   const when = data.exportedAt ? new Date(data.exportedAt).toLocaleDateString('he-IL') : 'לא ידוע';
   const ok = await showConfirm({
     title: 'לשחזר מהגיבוי?',
@@ -1943,7 +1966,7 @@ function cardCompact(n) {
   if (effectiveRemindAt(n) > Date.now()) badges.push(`<span class="nb remind">${svg('bell')}</span>`);
   if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
   if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
-  const sub = n.body ? escapeHtml(n.body) : (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · ');
+  const sub = escapeHtml(n.body || (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · '));
   return `<article class="note-card compact" data-id="${n.id}" style="--cat:${col}">
     <div class="note-head">
       <span class="cat-dot" style="background:${n.category ? col : 'var(--border)'}"></span>
@@ -2730,106 +2753,12 @@ async function initLaunchActions() {
   if (url) runLaunchAction(actionFromUrl(url));
 }
 
-// ------------------------------------------------------------ in-app updates
-// Android only. On the web the service worker already updates the app on its
-// own (see initUpdateChecking), so a "download and install" button would have
-// nothing to download.
-let pendingUpdate = null;
-
-function setUpdateState(text, state) {
-  const el = $('updateState');
-  if (!el) return;
-  el.textContent = text;
-  if (state) el.dataset.state = state; else delete el.dataset.state;
-}
-function setUpdateProgress(frac) {
-  const bar = $('updateBar'), fill = $('updateBarFill');
-  if (!bar || !fill) return;
-  if (frac == null) { bar.hidden = true; fill.style.width = '0'; return; }
-  bar.hidden = false;
-  fill.style.width = `${Math.max(0, Math.min(1, frac)) * 100}%`;
-}
-
-async function runUpdateCheck({ silent = false } = {}) {
-  const btn = $('updateCheckBtn'), install = $('updateInstallBtn');
-  if (!silent) { setUpdateState('בודק…'); if (btn) btn.disabled = true; }
-  try {
-    const res = await checkForUpdate(APP_VERSION);
-    pendingUpdate = res.available ? res : null;
-    if (install) install.hidden = !res.available;
-    if (res.available) {
-      setUpdateState(`גרסה ${res.version} זמינה · ${fmtSize(res.size)}`, 'available');
-    } else if (res.noAsset) {
-      setUpdateState('יש גרסה חדשה אך בלי קובץ התקנה — נסו שוב מאוחר יותר', 'error');
-    } else if (!silent) {
-      setUpdateState(`מותקנת הגרסה העדכנית (${APP_VERSION})`, 'current');
-    }
-    return res;
-  } catch (e) {
-    // Never report "up to date" when the check itself failed — offline is
-    // not the same answer as current, and telling them apart is the whole
-    // point of a button you press on purpose.
-    if (!silent) setUpdateState(`הבדיקה נכשלה: ${e && e.message ? e.message : e}`, 'error');
-    return null;
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-async function runUpdateInstall() {
-  if (!pendingUpdate) return;
-  const btn = $('updateInstallBtn'), check = $('updateCheckBtn');
-  if (btn) btn.disabled = true;
-  if (check) check.disabled = true;
-  setUpdateState(`מוריד את ${pendingUpdate.version}…`);
-  setUpdateProgress(0);
-  try {
-    await downloadAndInstall(pendingUpdate, { onProgress: (f) => setUpdateProgress(f) });
-    setUpdateProgress(1);
-    setUpdateState('ההורדה הושלמה — אשרו את ההתקנה', 'current');
-  } catch (e) {
-    setUpdateProgress(null);
-    if (e && e.needsPermission) {
-      // Not a failure so much as a missing one-time permission, and the only
-      // place it can be granted is a system screen.
-      const go = await showConfirm({
-        title: 'דרוש אישור חד-פעמי',
-        message: 'אנדרואיד דורש אישור להתקנת עדכונים מתוך האפליקציה. לפתוח את המסך המתאים?',
-        confirmText: 'פתיחת ההגדרות', cancelText: 'ביטול', icon: 'shield',
-      });
-      if (go) await openInstallSettings();
-      setUpdateState('לאחר מתן האישור אפשר לנסות שוב', 'error');
-    } else {
-      setUpdateState(`ההתקנה נכשלה: ${e && e.message ? e.message : e}`, 'error');
-    }
-  } finally {
-    if (btn) btn.disabled = false;
-    if (check) check.disabled = false;
-  }
-}
-
-function initUpdater() {
-  const field = $('updateField');
-  if (!field) return;
-  if (!isNative()) { field.hidden = true; return; }
-  field.hidden = false;
-  setUpdateState(`מותקנת גרסה ${APP_VERSION}`);
-  $('updateCheckBtn').addEventListener('click', () => runUpdateCheck());
-  $('updateInstallBtn').addEventListener('click', () => runUpdateInstall());
-  // A quiet check on startup, so an available update is already announced
-  // when Settings is opened rather than waiting to be asked for. Silent
-  // because a failed background check shouldn't put an error on a screen
-  // nobody was looking at.
-  runUpdateCheck({ silent: true });
-}
-
 async function main() {
   initIcons();
   initPickers();
   bind();
   await initStorage();
   const av = $('appVersion'); if (av) av.textContent = `גרסה ${APP_VERSION}`;
-  initUpdater();
   store.onChange(() => { applyTheme(); renderHero(); renderJobFilter(); updateEntryLayoutToggle(); renderAll(); renderMore(); renderNotes(); renderSyncStatus(); updateAccountUI(); refreshReminder(); rescheduleNative(); });
   // Both reads must finish before the first paint: the hero renders from the
   // open shift, and the auto-close banner from its flag.

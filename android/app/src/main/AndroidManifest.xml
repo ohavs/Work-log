@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -65,13 +66,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
-    <!-- Minute-accurate reminders. Grantable by the user on Android 13+ and
-         only used when they opt in; the default path uses inexact alarms,
-         which still survive Doze and are close enough for a daily nudge. -->
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-
-    <!-- Lets the in-app updater hand a downloaded APK to the system
-         installer. Distribution is a direct APK, not the Play Store, so
-         there's no in-app update API to use instead. -->
-    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <!-- The notifications plugin asks for exact alarms, which Google Play
+         reserves for alarm-clock and calendar apps. Reminders here are a
+         daily nudge: inexact alarms that still get through Doze are enough.
+         The install permission belonged to the old GitHub self-updater; a
+         Play app may only be updated by Play. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" tools:node="remove" />
 </manifest>
