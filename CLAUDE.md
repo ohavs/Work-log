@@ -14,7 +14,7 @@
 ## Google Play launch (in progress, started 2026-11-12)
 - The plan, the decisions and every step: `docs/PLAY_LAUNCH_PLAN.md` (Hebrew). Stage 0 is decided (see the doc). The GitHub APK is frozen at v92: `android.yml` builds only the Play AAB
   (versionCode 1000 + run number, upload key = the existing `ANDROID_KEYSTORE_*` secrets).
-- The owner asked: give their steps ONE AT A TIME, complete in the reply (links, exact text to copy),
+- The owner asked: give their steps ONE AT A TIME (one form per message), in Hebrew only, complete in the reply (links, exact text to copy),
   never "see the repo".
 - Model: `ohavs/Currency-26` (public, clone read-only to compare), approved for production on 2026-11-12.
   Its `CLAUDE.md`, `docs/PLAY_LAUNCH_PLAN.md`, `.github/workflows/release.yml` and `play-listing.yml` are the

@@ -145,8 +145,11 @@
 9. **אנגלית** כשפה שנייה, אם רוצים קהל מחוץ לישראל (דורש גם חישובי שכר כלליים).
 
 ## צעדים של אוהב (אחד בכל פעם, מלא בתשובה, עם קישורים)
-- [ ] **צעד 1 (נשלח 12.11):** Play Console ← Create app (שם באנגלית, en-US, App, Free).
-- [ ] צעד 2: העלאה ידנית ראשונה של ה־AAB ל־Internal testing (artifact `work-log-play-bundle` מריצת android.yml האחרונה).
+- [x] **צעד 1 (12.11):** נוצרה ב־Play Console: ‏Work Hours: Time & Pay Tracker, ‏`app.worklog.hours`, ‏en-US, App, Free.
+- [x] צעד 2 (12.11): ‏`work-log-v95-1033.aab` הועלה ידנית ל־Internal testing (Closed testing נעול עד שכל משימות ה־Dashboard מולאו).
+- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ⬜ Sign in details ("All functionality... without any access restrictions"; לעדכן כשיש פרימיום) · ⬜ Ads (Yes) · ⬜ Content rating · ⬜ Target audience (18+) · ⬜ Data safety · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
+  (מדיניות הפרטיות כבר כוללת AdMob ורכישות, 12.11.)
+- אחרי App content: מסלול Closed testing (Alpha): מדינות, בודקים, release, שליחה לבדיקה. אז לשנות `PLAY_TRACK` ב־android.yml ל־`alpha`.
 - [ ] צעד 3: SHA-1 של App signing מ־Play ← Firebase, ו־`google-services.json` חדש.
 - [ ] צעד 4: חשבון השירות של Currency מקבל הרשאה לאפליקציה + Secret ‏`PLAY_SERVICE_ACCOUNT_JSON` בריפו הזה.
 - [ ] אחר כך: App content, ‏Store settings, בדיקה סגורה (12 × 14 יום), מוצר הפרימיום, AdMob.
