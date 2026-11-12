@@ -6,6 +6,8 @@
       "firestore.rules",
       "**/*.md",
       "docs/**",
+      "store/**",
+      "tools/**",
       "design-system/**",
       "scripts/**",
       ".git/**",

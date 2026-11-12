@@ -1,0 +1,33 @@
+Log your work hours with one tap. Tap "Clock in" when you start and "Clock out" when you finish, and the date and time are recorded for you. At the end of the month your report is ready, with hours, days and pay.
+
+The app is currently in Hebrew, and its pay calculations follow Israeli law.
+
+★ One-tap clock in and out
+• One big button on the home screen, and a running timer during your shift
+• A reminder if you forget to clock out, and automatic closing of a shift that runs too long
+• A daily reminder to log your hours that skips days off and holidays
+• Add and edit shifts, breaks, vacation and sick days by hand
+
+★ Reports and goals
+• Monthly report: hours, work days and pay
+• Weekly and monthly hour goals, with your progress and what's left
+• Breakdown by week, and a count of vacation and sick days
+• Export to PDF and CSV for your employer or accountant
+
+★ Net pay, pension and overtime
+• Payslip estimate: gross, income tax, national insurance and health tax, and net
+• Pension and severance contributions
+• Overtime (125% and 150%), vacation days, sick pay and recuperation pay
+The calculations are an estimate only and don't replace your payslip.
+
+★ A notebook for work
+Contacts, codes, procedures and checklists, sorted into categories, with search and pinning.
+
+★ And more
+• Several workplaces, each with its own hourly rate
+• Light and dark mode, and 8 color sets
+• Works offline
+• Sign in with Google for cloud backup and sync between devices (optional)
+• Backup and restore to a file
+
+Your data is stored on your device. If you sign in, it's also stored in your account in the cloud, and you can delete your account and data from inside the app at any time.

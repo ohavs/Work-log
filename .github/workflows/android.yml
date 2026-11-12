@@ -17,6 +17,7 @@ on:
       - 'docs/**'
       - 'design-system/**'
       - 'store/**'
+      - 'tools/**'
       - '.github/workflows/deploy.yml'
       - '.github/workflows/play-listing.yml'
   workflow_dispatch:
