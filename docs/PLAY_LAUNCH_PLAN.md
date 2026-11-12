@@ -149,9 +149,9 @@
 ## צעדים של אוהב (אחד בכל פעם, מלא בתשובה, עם קישורים)
 - [x] **צעד 1 (12.11):** נוצרה ב־Play Console: ‏Work Hours: Time & Pay Tracker, ‏`app.worklog.hours`, ‏en-US, App, Free.
 - [x] צעד 2 (12.11): ‏`work-log-v95-1033.aab` הועלה ידנית ל־Internal testing (Closed testing נעול עד שכל משימות ה־Dashboard מולאו).
-- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ✅ Sign in details ("Is any part of your app restricted?" = No; לשנות ל־Yes עם הסבר כשיש פרימיום) · ✅ Ads (Yes) · ✅ Content rating (Everyone, PEGI 3, ברזיל 14+ בגלל רכישות) · ✅ Target audience (18+) · ✅ Data safety (12.11, לפי התשובות למטה) · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
+- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ✅ Sign in details ("Is any part of your app restricted?" = No; לשנות ל־Yes עם הסבר כשיש פרימיום) · ✅ Ads (Yes) · ✅ Content rating (Everyone, PEGI 3, ברזיל 14+ בגלל רכישות) · ✅ Target audience (18+) · ✅ Data safety (12.11, לפי התשובות למטה) · ✅ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
   (מדיניות הפרטיות כבר כוללת AdMob ורכישות, 12.11.)
-- **הבא בתור:** Government apps (No). אוהב ביקש: כשתהיה לי גישה לקונסולה (חשבון השירות, צעד 4), לעבור ולוודא את כל מה שמילא ב־App content.
+- **הבא בתור:** Financial features (none). אוהב ביקש: כשתהיה לי גישה לקונסולה (חשבון השירות, צעד 4), לעבור ולוודא את כל מה שמילא ב־App content.
 - אחרי App content: מסלול Closed testing (Alpha): מדינות, בודקים, release, שליחה לבדיקה. אז לשנות `PLAY_TRACK` ב־android.yml ל־`alpha`.
 - [ ] צעד 3: SHA-1 של App signing מ־Play ← Firebase, ו־`google-services.json` חדש.
 - [ ] צעד 4: חשבון השירות של Currency מקבל הרשאה לאפליקציה + Secret ‏`PLAY_SERVICE_ACCOUNT_JSON` בריפו הזה.
