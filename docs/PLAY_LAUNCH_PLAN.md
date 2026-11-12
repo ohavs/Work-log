@@ -147,7 +147,7 @@
 ## צעדים של אוהב (אחד בכל פעם, מלא בתשובה, עם קישורים)
 - [x] **צעד 1 (12.11):** נוצרה ב־Play Console: ‏Work Hours: Time & Pay Tracker, ‏`app.worklog.hours`, ‏en-US, App, Free.
 - [x] צעד 2 (12.11): ‏`work-log-v95-1033.aab` הועלה ידנית ל־Internal testing (Closed testing נעול עד שכל משימות ה־Dashboard מולאו).
-- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ⬜ Sign in details ("All functionality... without any access restrictions"; לעדכן כשיש פרימיום) · ⬜ Ads (Yes) · ⬜ Content rating · ⬜ Target audience (18+) · ⬜ Data safety · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
+- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ✅ Sign in details ("Is any part of your app restricted?" = No; לשנות ל־Yes עם הסבר כשיש פרימיום) · ⬜ Ads (Yes) · ⬜ Content rating · ⬜ Target audience (18+) · ⬜ Data safety · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
   (מדיניות הפרטיות כבר כוללת AdMob ורכישות, 12.11.)
 - אחרי App content: מסלול Closed testing (Alpha): מדינות, בודקים, release, שליחה לבדיקה. אז לשנות `PLAY_TRACK` ב־android.yml ל־`alpha`.
 - [ ] צעד 3: SHA-1 של App signing מ־Play ← Firebase, ו־`google-services.json` חדש.
