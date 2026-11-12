@@ -18,6 +18,7 @@
 - Model: `ohavs/Currency-26` (public, clone read-only to compare), approved for production on 2026-11-12.
   Its `CLAUDE.md`, `docs/PLAY_LAUNCH_PLAN.md`, `.github/workflows/release.yml` and `play-listing.yml` are the
   reference for flavors, the Play upload, fastlane listing and the forms' answers.
+- The owner asked: once I have console access (service account, step 4), review everything they filled in App content.
 - The public site for privacy/deletion pages is `ohavs/ohavs.github.io` (add it with `add_repo`, access push).
 
 ## Releasing a change
