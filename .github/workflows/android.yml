@@ -10,7 +10,8 @@ on:
       - main
       - claude/hebrew-work-tracker-pwa-m0mv4q
     paths-ignore:
-      - 'README.md'
+      - '**.md'
+      - 'docs/**'
       - 'design-system/**'
   workflow_dispatch:
 
