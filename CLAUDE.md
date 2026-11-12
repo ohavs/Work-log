@@ -2,9 +2,8 @@
 
 ## Working with the user
 - Reply in Hebrew. Show a screenshot of every visual change before pushing it.
-- At the end of every reply that finishes a task, say whether it is safe to run `/clear` now
-  (i.e. everything is committed and pushed, nothing pending). If it is not safe, say what is left.
-  Before saying so, write what the next session needs into this file and `docs/PLAY_LAUNCH_PLAN.md`.
+- Don't mention `/clear` in every reply. Only when the conversation is getting long/heavy, say it's a good time
+  to `/clear`, and first write what the next session needs into this file and `docs/PLAY_LAUNCH_PLAN.md` (commit + push).
 - Do as much as possible yourself (code, CI, store texts and images, privacy pages, uploads through CI).
   The owner only does what needs their accounts: Play Console, Firebase/Google Cloud console, GitHub
   Secrets, their phone, recruiting testers. Write those steps so they can be done from a phone.

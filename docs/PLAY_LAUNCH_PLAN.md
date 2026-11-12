@@ -15,8 +15,8 @@
 - **ענף:** עובדים על `claude/hebrew-work-tracker-pwa-m0mv4q`. כל דחיפה אליו מפרסמת את האתר (Firebase Hosting) ובונה APK.
   אחרי שה־Play pipeline קיים, היא גם בונה AAB ושולחת ל־Play (שלב 2).
 - **גרסה:** כל שינוי שהמשתמש רואה מעלה גם את `APP_VERSION` ב־`js/app.js` וגם את `CACHE` ב־`sw.js`.
-- **`/clear` אחרי כל משימה:** בסוף כל משימה אני מעדכן את `CLAUDE.md` ואת המסמך הזה (מה נעשה, מה הבא),
-  דוחף, ואומר במפורש אם בטוח לעשות `/clear`. כל ההקשר לסשן הבא חי בקבצים, לא בשיחה.
+- **`/clear`:** אני מזכיר רק כשהשיחה נהיית עמוסה (לא בכל הודעה), ולפני כן מעדכן את `CLAUDE.md` ואת המסמך הזה ודוחף.
+  כל ההקשר לסשן הבא חי בקבצים, לא בשיחה.
 - **סודות:** אף פעם לא בגיט. מפתחות (keystore, ‏JSON של חשבון שירות) נשמרים כ־GitHub Secrets ונבנים מהם ב־CI.
   קובץ שאני מייצר (למשל מפתח העלאה) נשלח לאוהב לשמירה במקום בטוח, ולא נשאר בריפו.
   מזהים ציבוריים (Firebase web config, ‏AdMob ids) אינם סודות ויכולים להיות בקוד.
@@ -108,7 +108,7 @@
 ### תשובות מוכנות ל־App content (טיוטה, מתעדכנת לפי שלב 0)
 - **Privacy policy:** `https://ohavs.github.io/worklog-privacy.html`.
 - **App access:** אין צורך בהתחברות; כל הפיצ'רים פתוחים בלי חשבון. ההתחברות רק לסנכרון.
-- **Ads:** No (אם מחליטים חינם).
+- **Ads:** Yes (✅ 12.11, לפי שלב 7).
 - **Content rating:** Utility/Productivity. הכול No.
 - **Target audience:** ‏18+. ‏Appeals to children: No.
 - **Financial features:** "My app doesn't provide any financial features" (חישוב שכר משוער, בלי כסף אמיתי).
@@ -147,7 +147,7 @@
 ## צעדים של אוהב (אחד בכל פעם, מלא בתשובה, עם קישורים)
 - [x] **צעד 1 (12.11):** נוצרה ב־Play Console: ‏Work Hours: Time & Pay Tracker, ‏`app.worklog.hours`, ‏en-US, App, Free.
 - [x] צעד 2 (12.11): ‏`work-log-v95-1033.aab` הועלה ידנית ל־Internal testing (Closed testing נעול עד שכל משימות ה־Dashboard מולאו).
-- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ✅ Sign in details ("Is any part of your app restricted?" = No; לשנות ל־Yes עם הסבר כשיש פרימיום) · ⬜ Ads (Yes) · ⬜ Content rating · ⬜ Target audience (18+) · ⬜ Data safety · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
+- [ ] **App content (עכשיו, טופס אחד בכל הודעה):** ✅ Privacy policy · ✅ Sign in details ("Is any part of your app restricted?" = No; לשנות ל־Yes עם הסבר כשיש פרימיום) · ✅ Ads (Yes) · ⬜ Content rating · ⬜ Target audience (18+) · ⬜ Data safety · ⬜ Government apps (No) · ⬜ Financial features (none) · ⬜ Health (No) · ⬜ Trader status · ⬜ Category + contact · ⬜ Store listing
   (מדיניות הפרטיות כבר כוללת AdMob ורכישות, 12.11.)
 - אחרי App content: מסלול Closed testing (Alpha): מדינות, בודקים, release, שליחה לבדיקה. אז לשנות `PLAY_TRACK` ב־android.yml ל־`alpha`.
 - [ ] צעד 3: SHA-1 של App signing מ־Play ← Firebase, ו־`google-services.json` חדש.
