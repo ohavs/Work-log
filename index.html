@@ -407,6 +407,25 @@
           </div>
         </details>
 
+        <details class="set-group" data-group="about">
+          <summary><span class="sg-ic" data-ic="shield"></span><span class="sg-text"><b>אודות ופרטיות</b><small>מדיניות פרטיות · מחיקת חשבון · רישיונות</small></span><span class="sg-chev" data-ic="chevDown"></span></summary>
+          <div class="sg-body">
+            <div class="field">
+              <a class="btn ghost-line" id="privacyLink" href="https://ohavs.github.io/worklog-privacy.html" target="_blank" rel="noopener">מדיניות פרטיות</a>
+              <p class="form-note">הנתונים נשמרים במכשיר. אם מתחברים עם Google, הם נשמרים גם בענן (Firebase) כדי לסנכרן בין מכשירים, ורק בעל החשבון יכול לגשת אליהם.</p>
+            </div>
+            <div class="field" id="deleteAcctField" hidden>
+              <button type="button" class="btn danger-line" id="deleteAcctBtn"><span data-ic="trash"></span> מחיקת החשבון והנתונים מהענן</button>
+              <p class="form-note">מוחק לצמיתות את הנתונים שבענן ואת החשבון באפליקציה. מה שבמכשיר הזה נשאר.</p>
+            </div>
+            <div class="field">
+              <p class="form-note">חישובי השכר, המסים והזכויות הם הערכה בלבד ואינם ייעוץ משפטי, מס או שכר. הקובע הוא תלוש השכר והחוק.</p>
+              <span class="field-label">רישיונות קוד פתוח</span>
+              <p class="form-note licenses" dir="ltr">Noto Sans Hebrew — SIL Open Font License 1.1<br>jsPDF — MIT<br>Firebase JS SDK — Apache 2.0<br>Capacitor — MIT</p>
+            </div>
+          </div>
+        </details>
+
         <!-- Lets us confirm exactly which build is actually running on a
              device, instead of guessing whether an update really landed. -->
         <p class="app-version" id="appVersion"></p>

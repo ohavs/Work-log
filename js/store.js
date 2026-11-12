@@ -395,6 +395,44 @@ class Store {
     await this._fb.authMod.signOut(this._fb.auth);
   }
 
+  // Deletes the cloud copy and the account itself (Google Play requires apps
+  // with sign-in to offer this). The data on this device stays, so the app
+  // goes on working locally; the caller says so.
+  //
+  // Order matters. The snapshot listener is detached and the pending push
+  // cancelled FIRST: a listener that saw the document vanish would treat it
+  // as a first sign-in and seed the cloud again from this device.
+  async deleteAccount() {
+    if (!this._fb || !this.user) throw new Error('not signed in');
+    const { auth, authMod, db, fsMod } = this._fb;
+    const current = auth.currentUser;
+    if (!current) throw new Error('not signed in');
+
+    // Firebase refuses to delete an account whose sign-in isn't recent;
+    // signing in again right here is the fix, so do it up front instead of
+    // failing halfway (data gone, account still there).
+    if (isNative()) {
+      const idToken = await nativeGoogleSignIn();
+      if (!idToken) throw new Error('native sign-in unavailable');
+      await authMod.reauthenticateWithCredential(current, authMod.GoogleAuthProvider.credential(idToken));
+    } else {
+      await authMod.reauthenticateWithPopup(current, new authMod.GoogleAuthProvider());
+    }
+
+    if (this._unsub) { this._unsub(); this._unsub = null; }
+    clearTimeout(this._saveTimer);
+    this._docRef = null;
+    this.mode = 'local';
+    this._dirty = false;
+
+    await fsMod.deleteDoc(fsMod.doc(db, 'users', current.uid, 'data', 'main'));
+    await authMod.deleteUser(current);
+    await nativeSignOut();
+    this.user = null;
+    await storage.remove(LS_USER);
+    this._emit();
+  }
+
   // ---- persistence dispatch ----
   // Every mutation writes to the device immediately and marks state dirty; the
   // cloud push is best-effort and retried on the next change or snapshot.

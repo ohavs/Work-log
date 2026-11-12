@@ -3,7 +3,7 @@
 // The app has no build step — this is the one exception, run by hand when the
 // Firebase SDK needs updating, with the bundled output committed to the repo.
 //
-//   npm install firebase@^12.6.0 esbuild
+//   npm install firebase@^12.6.0 esbuild   (deleteUser & co. added 2026-11-12: account deletion)
 //   npx esbuild scripts/firebase-bundle-entry.js --bundle --format=esm \
 //       --minify --target=es2020 --legal-comments=none \
 //       --outfile=js/vendor/firebase.js
@@ -17,13 +17,15 @@ import {
   getAuth, onAuthStateChanged, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithCredential, signOut,
+  deleteUser, reauthenticateWithCredential, reauthenticateWithPopup,
 } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, onSnapshot, setDoc, deleteDoc } from 'firebase/firestore';
 
 export const appMod = { initializeApp };
 export const authMod = {
   getAuth, onAuthStateChanged, GoogleAuthProvider,
   signInWithPopup, signInWithRedirect, getRedirectResult,
   signInWithCredential, signOut,
+  deleteUser, reauthenticateWithCredential, reauthenticateWithPopup,
 };
-export const fsMod = { getFirestore, doc, onSnapshot, setDoc };
+export const fsMod = { getFirestore, doc, onSnapshot, setDoc, deleteDoc };

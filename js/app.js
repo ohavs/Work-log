@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v93';
+const APP_VERSION = 'v94';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1259,6 +1259,7 @@ function renderSyncStatus() {
   const setDot = (state) => { if (acc) { acc.classList.toggle('sync-pending', state === 'pending' || state === 'offline'); } };
   if (!store.cloudAvailable) { el.textContent = 'הנתונים נשמרים רק במכשיר הזה'; el.dataset.state = 'local'; btn.hidden = true; setDot('local'); return; }
   btn.hidden = false;
+  $('deleteAcctField').hidden = !store.user;
   if (!store.user) { el.textContent = 'התחברו עם Google לסנכרון בין מכשירים'; el.dataset.state = 'local'; btn.textContent = 'התחברות'; btn.classList.remove('out'); setDot('local'); return; }
   btn.textContent = 'התנתקות';
   btn.classList.add('out');
@@ -1271,6 +1272,7 @@ function renderSyncStatus() {
     offline: 'אופליין — הנתונים שמורים במכשיר ויסונכרנו כשהחיבור יחזור',
   }[state] || `מסונכרן בענן · ${who}`;
   setDot(state);
+  $('deleteAcctField').hidden = !store.user;
   // confirm only after genuinely reconnecting from offline — routine online
   // saves (pending→synced) stay silent.
   if (lastSyncState === 'offline' && state === 'synced') toast('הכל סונכרן לענן ✓');
@@ -1540,6 +1542,32 @@ async function handleAuth() {
       icon: 'alert',
       raw: true,
     });
+  }
+}
+
+// Two confirmations: the first says what goes and what stays, the second
+// is the point of no return. Google asks the user to sign in once more
+// before an account can be deleted.
+async function deleteAccountFlow() {
+  if (!store.user) return;
+  const ok = await showConfirm({
+    title: 'למחוק את החשבון?',
+    message: 'כל הנתונים שבענן יימחקו לצמיתות, וגם החשבון באפליקציה. הנתונים במכשיר הזה נשארים. כדאי לייצא גיבוי לפני כן.',
+    confirmText: 'המשך', danger: true, icon: 'alert',
+  });
+  if (!ok) return;
+  const sure = await showConfirm({
+    title: 'בטוח?',
+    message: 'אי אפשר לבטל את המחיקה. Google יבקש להתחבר שוב כדי לאשר.',
+    confirmText: 'מחיקה לצמיתות', danger: true, icon: 'trash',
+  });
+  if (!sure) return;
+  try {
+    await store.deleteAccount();
+    toast('החשבון והנתונים בענן נמחקו');
+  } catch (e) {
+    console.warn(e);
+    toast('המחיקה לא הושלמה · נסו שוב');
   }
 }
 
@@ -2574,6 +2602,7 @@ function bind() {
   $('settingsForm').onsubmit = submitSettings;
   $('paletteRow').addEventListener('click', (e) => { const b = e.target.closest('button[data-pal]'); if (b) selectPalette(b.dataset.pal); });
   $('authBtn').onclick = handleAuth;
+  $('deleteAcctBtn').onclick = deleteAccountFlow;
   // Remember which settings groups are open, per device.
   $('settingsForm').querySelectorAll('details.set-group').forEach((d) => d.addEventListener('toggle', () => {
     const cur = uiPrefs.settingsOpen && typeof uiPrefs.settingsOpen === 'object' ? uiPrefs.settingsOpen : { pay: true };

@@ -44,10 +44,10 @@
 1. ✅ (v93) **המעדכן מתוך האפליקציה + `REQUEST_INSTALL_PACKAGES`:** אסור ב־Play (אפליקציה מ־Play לא מעדכנת את עצמה ממקור אחר).
    בגרסת play: בלי `update.js`/`ApkInstallerPlugin`, בלי ההרשאה (manifest overlay עם `tools:node="remove"`), בלי מסך העדכון.
 2. ✅ (v93) **`SCHEDULE_EXACT_ALARM`:** ‏Play מגביל אותה לאפליקציות שעון מעורר/יומן, ודורש הצהרה. התזכורות ממילא inexact. להסיר.
-3. **מחיקת חשבון ונתונים (חובה):** התחברות Google יוצרת חשבון Firebase, ולכן Play דורש:
+3. ✅ (v94) **מחיקת חשבון ונתונים (חובה):** התחברות Google יוצרת חשבון Firebase, ולכן Play דורש:
    - כפתור באפליקציה: "מחיקת החשבון והנתונים מהענן" (מוחק את `users/{uid}` ב־Firestore ואת משתמש ה־Auth, אחרי אישור).
    - דף אינטרנט עם הוראות מחיקה (גם למי שכבר הסיר את האפליקציה), באתר `ohavs.github.io`.
-4. **מדיניות פרטיות:** אין כרגע. לכתוב `https://ohavs.github.io/worklog-privacy.html` (ריפו `ohavs/ohavs.github.io`, אותו מייל `ohavstudio.contact@gmail.com`),
+4. ✅ **מדיניות פרטיות:** פורסמה ב־12.11 (`worklog-privacy.html`, ‏`worklog-delete.html` ב־`ohavs/ohavs.github.io`; לעדכן כשנכנסות פרסומות!). היה: אין. לכתוב `https://ohavs.github.io/worklog-privacy.html` (ריפו `ohavs/ohavs.github.io`, אותו מייל `ohavstudio.contact@gmail.com`),
    ולקשר אליה מהגדרות ← "אודות" (מקטע חדש: גרסה, פרטיות, מחיקת חשבון, רישיונות, הסתייגות שחישובי השכר הם הערכה בלבד).
 5. ✅ (v93) **XSS:** שני מקומות מכניסים טקסט לא מנוקה ל־HTML: התצוגה המקוצרת של פתק (`js/app.js` ‏`cardCompact`, ערכי השדות)
    ותמונת המשתמש בכפתור העליון (`updateAccountUI`). לתקן. וגם: שחזור מגיבוי בודק רק ש־`entries` הוא מערך; להוסיף בדיקת מבנה.
@@ -58,7 +58,7 @@
 8. **אתר Firebase מגיש קבצים פנימיים:** `CLAUDE.md`, ‏`ANDROID.md` ו־`docs/` נגישים ב־`work-ccd39.web.app`. ✅ נוסף ל־ignore ב־12.11.
 9. **הריפו ציבורי** (כולל `google-services.json` וההיסטוריה). אחרי המעבר ל־Play, להפוך לפרטי, כמו ב־Currency. 👤
    שימו לב: המעדכן של גרסת הגיטהאב קורא Releases ציבוריים, ולכן יפסיק לעבוד אחרי זה.
-10. **רישיונות:** קובץ OFL לגופן Noto Sans Hebrew ו־MIT ל־jsPDF, בתוך האפליקציה ובמסך "אודות".
+10. ✅ (v94) **רישיונות:** קובץ OFL לגופן Noto Sans Hebrew ו־MIT ל־jsPDF, בתוך האפליקציה ובמסך "אודות".
 11. **ניקוי:** `measurementId` שלא בשימוש, `allowBackup` עם כללי גיבוי מפורשים (`data_extraction_rules.xml`), הסרת העותק הישן ב־GitHub Pages (`ohavs.github.io/Work-log`) מה־README.
 
 ## שלב 2: בנייה ל־Play 🤖 (+👤 סודות ו־Firebase)
@@ -144,5 +144,13 @@
 8. **תזכורת לפי מיקום** (כשמגיעים לעבודה). דורש הרשאת מיקום ברקע, שהיא הצהרה קשה ב־Play, ולכן רק אם באמת מבוקש.
 9. **אנגלית** כשפה שנייה, אם רוצים קהל מחוץ לישראל (דורש גם חישובי שכר כלליים).
 
-## תזכורות קבועות לאוהב (להציג בתחילת כל סשן עד שאוהב מאשר שנעשה)
-_(יתמלא כשיהיו צעדים פתוחים של אוהב.)_
+## צעדים של אוהב (אחד בכל פעם, מלא בתשובה, עם קישורים)
+- [ ] **צעד 1 (נשלח 12.11):** Play Console ← Create app (שם באנגלית, en-US, App, Free).
+- [ ] צעד 2: העלאה ידנית ראשונה של ה־AAB ל־Internal testing (artifact `work-log-play-bundle` מריצת android.yml האחרונה).
+- [ ] צעד 3: SHA-1 של App signing מ־Play ← Firebase, ו־`google-services.json` חדש.
+- [ ] צעד 4: חשבון השירות של Currency מקבל הרשאה לאפליקציה + Secret ‏`PLAY_SERVICE_ACCOUNT_JSON` בריפו הזה.
+- [ ] אחר כך: App content, ‏Store settings, בדיקה סגורה (12 × 14 יום), מוצר הפרימיום, AdMob.
+
+## הבנייה ל־Play (12.11)
+- ריצה 43162376647: ‏AAB חתום (`work-log-v93-1031.aab`, ‏5.9MB). ההרשאות: INTERNET, ‏POST_NOTIFICATIONS, ‏RECEIVE_BOOT_COMPLETED,
+  ‏VIBRATE, ‏WAKE_LOCK, ‏ACCESS_NETWORK_STATE, ‏DUMP (מספרייה, הרשאת מערכת שלא מוענקת). בלי ההרשאות המוגבלות.

@@ -558,6 +558,9 @@ input::placeholder { color: var(--muted-fg); opacity: .8; font-weight: 500; }
 .update-bar { height: 8px; border-radius: 99px; background: var(--surface-2); overflow: hidden; }
 .update-bar-fill { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--primary); transition: width .2s ease; }
 
+.btn.danger-line { background: transparent; border: 1.5px solid var(--danger); color: var(--danger); }
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.form-note.licenses { text-align: left; line-height: 1.7; }
 .app-version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: 8px 0 0; }
 .version { text-align: center; font-size: 12px; color: var(--muted-fg); margin: 2px 0 0; }
 
