@@ -28,7 +28,7 @@ const $ = (id) => document.getElementById(id);
 // Bumped alongside sw.js's CACHE constant on every deploy-affecting change —
 // shown in Settings so it's possible to confirm exactly which build is
 // actually running on a device instead of guessing whether an update landed.
-const APP_VERSION = 'v94';
+const APP_VERSION = 'v95';
 const ACTIVE_KEY = 'wl_active';
 const AUTOCLOSE_KEY = 'wl_autoclose'; // id of an auto-closed shift awaiting user review
 const MIN_SHIFT_MS = 60000;   // shifts under a minute are treated as an accidental double-tap
@@ -1971,7 +1971,7 @@ function cardDetailed(n) {
   const col = catColor(n.category);
   const done = (n.checklist || []).filter((c) => c.done).length, total = (n.checklist || []).length;
   const fields = (n.fields || []).filter((f) => f.label || f.value).slice(0, 4).map((f) =>
-    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val${f.secret ? ' masked' : ''}">${f.secret ? '••••••' : escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div>`).join('');
+    `<div class="nf-row"><span class="nf-label">${escapeHtml(f.label || '')}</span><span class="nf-val">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div>`).join('');
   const tags = (n.tags || []).slice(0, 6).map((t) => `<span class="ntag">#${escapeHtml(t)}</span>`).join('');
   const pct = total ? Math.round((done / total) * 100) : 0;
   return `<article class="note-card detailed" data-id="${n.id}" style="--cat:${col}">
@@ -1994,7 +1994,7 @@ function cardCompact(n) {
   if (effectiveRemindAt(n) > Date.now()) badges.push(`<span class="nb remind">${svg('bell')}</span>`);
   if ((n.fields || []).length) badges.push(`<span class="nb">${svg('copy')}${(n.fields || []).length}</span>`);
   if (total) badges.push(`<span class="nb">${svg('check')}${done}/${total}</span>`);
-  const sub = escapeHtml(n.body || (n.fields || []).map((f) => (f.secret ? '••••' : f.value)).filter(Boolean).join(' · '));
+  const sub = escapeHtml(n.body || (n.fields || []).map((f) => f.value).filter(Boolean).join(' · '));
   return `<article class="note-card compact" data-id="${n.id}" style="--cat:${col}">
     <div class="note-head">
       <span class="cat-dot" style="background:${n.category ? col : 'var(--border)'}"></span>
@@ -2063,8 +2063,7 @@ function openNoteView(id) {
   const col = catColor(n.category);
   $('nvCat').innerHTML = n.category ? `<span class="nv-cat-pill" style="--cat:${col}">${escapeHtml(catName(n.category))}</span>` : '';
   const fields = (n.fields || []).filter((f) => f.label || f.value).map((f) => {
-    const eye = f.secret ? `<button type="button" class="nf-eye" data-reveal data-val="${escapeHtml(f.value || '')}" aria-label="הצגה">${svg('eye')}</button>` : '';
-    return `<div class="nv-field"><span class="nv-flabel">${escapeHtml(f.label || '')}${f.secret ? ` <span class="nv-lock">${svg('eyeOff')}</span>` : ''}</span><div class="nv-fval-row"><span class="nv-fval${f.secret ? ' masked' : ''}">${f.secret ? '••••••••' : escapeHtml(f.value || '')}</span>${eye}${copyBtn(f.value)}</div></div>`;
+    return `<div class="nv-field"><span class="nv-flabel">${escapeHtml(f.label || '')}</span><div class="nv-fval-row"><span class="nv-fval">${escapeHtml(f.value || '')}</span>${copyBtn(f.value)}</div></div>`;
   }).join('');
   const checklist = (n.checklist || []).map((c, i) =>
     `<button type="button" class="nv-check ${c.done ? 'on' : ''}" data-vtoggle="${i}"><span class="nv-check-box">${c.done ? svg('check') : ''}</span><span class="nv-check-text">${escapeHtml(c.text || '')}</span></button>`).join('');
@@ -2099,8 +2098,7 @@ function renderNoteFields() {
   $('nFields').innerHTML = noteDraft.fields.map((f, i) =>
     `<div class="nfield-row" data-i="${i}">
       <div class="nfield-top">
-        <input type="text" class="nfield-label" data-i="${i}" placeholder="תווית (למשל: סיסמה)" value="${escapeHtml(f.label || '')}" />
-        <button type="button" class="fld-secret ${f.secret ? 'on' : ''}" data-secret="${i}" aria-label="${f.secret ? 'שדה מוסתר' : 'הצגה גלויה'}" title="הסתרה — יוצג רק בלחיצה">${svg(f.secret ? 'eyeOff' : 'eye')}</button>
+        <input type="text" class="nfield-label" data-i="${i}" placeholder="תווית (למשל: מספר עובד)" value="${escapeHtml(f.label || '')}" />
         <button type="button" class="row-del" data-del-field="${i}" aria-label="הסרה">${svg('trash')}</button>
       </div>
       <input type="text" class="nfield-value" data-i="${i}" dir="auto" placeholder="ערך" value="${escapeHtml(f.value || '')}" autocapitalize="off" autocorrect="off" spellcheck="false" />
@@ -2493,14 +2491,6 @@ function bind() {
   $('noteViewBody').addEventListener('click', (e) => {
     const cp = e.target.closest('.nf-copy');
     if (cp) { copyText(cp.dataset.copy); return; }
-    const rev = e.target.closest('[data-reveal]');
-    if (rev) {
-      const val = rev.closest('.nv-field').querySelector('.nv-fval');
-      const masked = val.classList.toggle('masked'); // true when now hidden
-      val.textContent = masked ? '••••••••' : rev.dataset.val;
-      rev.innerHTML = svg(masked ? 'eye' : 'eyeOff');
-      return;
-    }
     const tog = e.target.closest('[data-vtoggle]');
     if (tog && viewingNoteId) {
       const n = notesAll().find((x) => x.id === viewingNoteId); if (!n) return;
@@ -2545,8 +2535,6 @@ function bind() {
     else if (e.target.classList.contains('nfield-value')) noteDraft.fields[i].value = e.target.value;
   });
   $('nFields').addEventListener('click', async (e) => {
-    const sec = e.target.closest('[data-secret]');
-    if (sec) { const i = Number(sec.dataset.secret); noteDraft.fields[i].secret = !noteDraft.fields[i].secret; renderNoteFields(); return; }
     const b = e.target.closest('[data-del-field]');
     if (b) {
       const i = Number(b.dataset.delField);
