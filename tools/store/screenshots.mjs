@@ -1,9 +1,12 @@
 // Google Play images: phone screenshots (1080x1920 JPEG) and the feature graphic (1024x500 JPEG), into
 // store/listing/<locale>/images (fastlane layout).
 //
-// Style ("night shift"): a deep teal night with soft orange and teal glows, a centred headline whose key words are
-// orange, an upright phone that runs off the bottom edge, and one piece of its screen lifted out and magnified
-// beside it, so the point of each screenshot reads even as a thumbnail. Deliberately unlike Currency's listing.
+// Style ("panorama", third round, 17.11.2026): one warm, light canvas six screenshots wide, cut into six, so the
+// orange and teal ribbons flow from one screenshot into the next when they sit side by side in the store. Each
+// screenshot has a dark teal headline with its key words in orange, a short line under it, and a large upright
+// phone. Extras only where they say something: the icon on the first, the clock-out reminder as a real
+// notification, export file badges on the report, and a light and a dark phone on the last.
+// Rejected so far: Currency's brutalist look, and magnified pieces of the screen.
 //
 // The app screens come from tools/store/capture.mjs (tools/store/out/*.png, 400x860 CSS px at x2.7).
 //
@@ -18,21 +21,24 @@ const { chromium } = createRequire(import.meta.url)('playwright');
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const SRC = path.join(ROOT, 'tools/store/out');
 const OUT = path.join(ROOT, 'store/listing');
-const shot = (name) => 'data:image/png;base64,' + fs.readFileSync(path.join(SRC, `${name}.png`)).toString('base64');
+const data = (file, type = 'image/png') => `data:${type};base64,` + fs.readFileSync(file).toString('base64');
+const shot = (name) => data(path.join(SRC, `${name}.png`));
+const ICON = () => data(path.join(OUT, 'iw-IL/images/icon.png'));
 
-const ORANGE = '#FB923C';
-// Each screenshot: the capture, a headline (orange words in *stars*), a line under it, and the magnified piece
-// (x, y, w, h in the capture's CSS px) with where it floats (top in the page, side).
+const INK = '#0B3B38', ORANGE = '#EA580C', W = 1080, H = 1920, N = 6;
+
 const COPY = {
   'iw-IL': {
     rtl: true,
+    app: 'שעון עבודה',
+    notif: { app: 'שעון עבודה', when: 'עכשיו', title: 'עדיין בעבודה?', body: 'המשמרת פתוחה כבר מעל 9 שעות. לא שכחת להחתים יציאה?' },
     shots: [
-      { img: 'home_active', h: 'כניסה ויציאה\n*בלחיצה אחת*', sub: 'התאריך והשעה נקלטים לבד', zoom: [60, 150, 280, 112], at: 1240, side: 'end' },
-      { img: 'reports', h: 'השעות והשכר\n*של כל החודש*', sub: 'דוח מוכן, עם ייצוא ל־PDF ול־CSV', zoom: [5, 125, 390, 90], at: 1080, side: 'start' },
-      { img: 'reports_weeks', h: 'יעד שבועי וחודשי\n*תמיד מול העיניים*', sub: 'כמה עשית וכמה נשאר', zoom: [15, 298, 370, 74], at: 1160, side: 'end' },
-      { img: 'more', h: 'כמה נכנס\n*נטו לבנק*', sub: 'הערכת תלוש, פנסיה ושעות נוספות', zoom: [10, 140, 380, 112], at: 1100, side: 'start' },
-      { img: 'notes', h: 'כל מה שצריך בעבודה\n*בפנקס אחד*', sub: 'טלפונים, קודים ורשימות משימות', zoom: [10, 222, 380, 192], at: 1200, side: 'end' },
-      { img: 'home_dark', h: 'בהיר או כהה\n*מסונכרן בענן*', sub: 'עובד גם בלי אינטרנט', zoom: null },
+      { img: 'home_active', h: 'כניסה ויציאה\n*בלחיצה אחת*', sub: 'התאריך והשעה נקלטים לבד' },
+      { img: 'reports', h: 'השעות והשכר\n*של כל החודש*', sub: 'דוח מוכן לשליחה, ב־PDF או ב־CSV' },
+      { img: 'reports_weeks', h: 'יעד שבועי וחודשי\n*תמיד מול העיניים*', sub: 'כמה עשית וכמה נשאר' },
+      { img: 'more', h: 'כמה נכנס\n*נטו לבנק*', sub: 'הערכת תלוש, פנסיה ושעות נוספות' },
+      { img: 'notes', h: 'כל מה שצריך בעבודה\n*בפנקס אחד*', sub: 'טלפונים, קודים ורשימות משימות' },
+      { img: 'home_dark', h: 'בהיר או כהה\n*מסונכרן בענן*', sub: 'ועובד גם בלי אינטרנט' },
     ],
     feature: { h: 'שעות העבודה והשכר שלך\n*בלחיצה אחת*' },
   },
@@ -41,62 +47,121 @@ const COPY = {
 const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;');
 const headline = (t) => esc(t).replace(/\*([^*]+)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
 
-const BASE = `${FONT_CSS}
-  *{box-sizing:border-box;margin:0}
-  body{overflow:hidden;position:relative;color:#fff;font-family:R,sans-serif;font-weight:900;
-    background:radial-gradient(900px 700px at 85% 8%, #F9731633, transparent 70%),
-      radial-gradient(1000px 900px at 0% 70%, #14B8A640, transparent 70%), linear-gradient(170deg,#0E4F4A,#062523 70%)}
-  em{font-style:normal;color:${ORANGE}}`;
+// The ribbons: two soft waves across the whole canvas, behind the phones.
+function ribbons(width, height) {
+  const wave = (y0, amp, len, phase) => {
+    let d = `M0 ${y0}`;
+    for (let x = 0; x <= width; x += 40) d += ` L${x} ${(y0 + amp * Math.sin((x / len) * 2 * Math.PI + phase)).toFixed(1)}`;
+    return d;
+  };
+  return `<svg class="rib" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+    <defs><linearGradient id="ro" x1="0" x2="1"><stop offset="0" stop-color="#FDBA74"/><stop offset=".5" stop-color="#FB923C"/><stop offset="1" stop-color="#F97316"/></linearGradient>
+    <linearGradient id="rt" x1="0" x2="1"><stop offset="0" stop-color="#5EEAD4"/><stop offset="1" stop-color="#14B8A6"/></linearGradient></defs>
+    <path d="${wave(height * 0.62, height * 0.09, 2600, 0.6)}" fill="none" stroke="url(#ro)" stroke-width="${height * 0.2}" stroke-linecap="round" opacity=".9"/>
+    <path d="${wave(height * 0.8, height * 0.06, 1900, 2.2)}" fill="none" stroke="url(#rt)" stroke-width="${height * 0.07}" stroke-linecap="round" opacity=".8"/>
+  </svg>`;
+}
 
-function screenshotHtml(c, s) {
-  const PHONE_W = 700, SCREEN_W = PHONE_W - 2 * 18, k = SCREEN_W / 400; // capture CSS px -> page px inside the phone
-  let zoom = '';
-  if (s.zoom) {
-    const [x, y, w, h] = s.zoom, z = 2.15, side = (s.side === 'start') === c.rtl ? 'right' : 'left';
-    // The lifted piece: the same capture, scaled up and clipped to the rectangle.
-    zoom = `<div class="zoom" style="${side}:46px;top:${s.at}px;width:${w * z}px;height:${h * z}px;
-      background:url('${shot(s.img)}') ${-x * z}px ${-y * z}px/${400 * z}px auto no-repeat"></div>`;
+const phone = (img, w, extra = '') => {
+  const pad = Math.round(w * 0.022), r = Math.round(w * 0.13);
+  return `<div class="phone" style="width:${w}px;height:${Math.round(w * 2.16)}px;padding:${pad}px;border-radius:${r}px;${extra}">
+    <div class="screen" style="border-radius:${r - pad}px;background-image:url('${shot(img)}');background-size:${w - 2 * pad}px auto"></div>
+    <div class="cam" style="top:${pad + w * 0.03}px;width:${w * 0.035}px;height:${w * 0.035}px;margin-left:-${w * 0.0175}px"></div></div>`;
+};
+
+function slideExtras(c, i) {
+  const n = c.notif;
+  if (i === 0) {
+    return `<div class="brand"><img src="${ICON()}"><span>${esc(c.app)}</span></div>
+      <div class="notif"><div class="nh"><img src="${ICON()}"><b>${esc(n.app)}</b><span>· ${esc(n.when)}</span></div>
+      <div class="nt">${esc(n.title)}</div><div class="nb">${esc(n.body)}</div></div>`;
   }
-  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${BASE}
-  body{width:1080px;height:1920px}
-  .h{position:absolute;top:120px;left:60px;right:60px;text-align:center;font-size:104px;line-height:1.1;letter-spacing:-1px}
-  .sub{position:absolute;top:385px;left:60px;right:60px;text-align:center;font-size:44px;font-weight:700;color:#CCFBF1;opacity:.9}
-  .phone{position:absolute;top:520px;left:50%;margin-left:-${PHONE_W / 2}px;width:${PHONE_W}px;height:1600px;background:#0A0F0F;border-radius:92px;padding:18px;
-    box-shadow:0 0 0 3px #2B4B48, 0 40px 120px #000a, 0 0 140px #14B8A630}
-  .screen{width:100%;height:100%;border-radius:76px;overflow:hidden;background:url('${shot(s.img)}') 0 0/${SCREEN_W}px auto no-repeat}
-  .zoom{position:absolute;z-index:2;border-radius:34px;background-color:#fff;box-shadow:0 30px 70px #000b, 0 0 0 8px #ffffff22;outline:4px solid ${ORANGE};outline-offset:10px}
-  </style></head><body>
-  <div class="h">${headline(s.h)}</div>
-  <div class="sub">${esc(s.sub)}</div>
-  <div class="phone"><div class="screen"></div></div>
-  ${zoom}
-  </body></html>`;
+  if (i === 1) return `<div class="file f1">PDF</div><div class="file f2">CSV</div>`;
+  return '';
+}
+
+function panoramaHtml(c) {
+  const slides = c.shots.map((s, i) => {
+    const phones = i === N - 1
+      ? `<div class="ph" style="left:70px;top:700px;transform:rotate(-8deg)">${phone('home', 600)}</div>
+         <div class="ph" style="left:380px;top:600px;transform:rotate(5deg)">${phone(s.img, 630)}</div>`
+      : `<div class="ph" style="left:${(W - 720) / 2}px;top:${i === 0 ? 620 : 560}px">${phone(s.img, 720)}</div>`;
+    return `<section style="left:${i * W}px">
+      <div class="h" style="top:${i === 0 ? 250 : 130}px">${headline(s.h)}</div>
+      <div class="sub" style="top:${i === 0 ? 490 : 370}px">${esc(s.sub)}</div>
+      ${phones}${slideExtras(c, i)}</section>`;
+  }).join('');
+  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${FONT_CSS}
+  *{box-sizing:border-box;margin:0}
+  body{width:${W * N}px;height:${H}px;overflow:hidden;position:relative;font-family:R,sans-serif;font-weight:900;color:${INK};
+    background:linear-gradient(180deg,#FFF8F1 0%,#FFF1E3 55%,#FFE8D2 100%)}
+  .rib{position:absolute;left:0;top:0}
+  section{position:absolute;top:0;width:${W}px;height:${H}px}
+  .h{position:absolute;left:70px;right:70px;text-align:center;font-size:100px;line-height:1.08;letter-spacing:-1.5px}
+  em{font-style:normal;color:${ORANGE}}
+  .sub{position:absolute;left:70px;right:70px;text-align:center;font-size:44px;font-weight:700;color:#3F6461}
+  .ph{position:absolute}
+  .phone{position:relative;background:#111716;box-shadow:0 0 0 4px #2E3B3A inset, 0 50px 90px -20px #7C2D1255, 0 20px 40px -10px #0006}
+  .screen{width:100%;height:100%;background-repeat:no-repeat;background-position:0 0;background-color:#fff}
+  .cam{position:absolute;left:50%;border-radius:50%;background:#000;box-shadow:0 0 0 3px #1c2423}
+  .brand{position:absolute;top:96px;left:0;right:0;display:flex;justify-content:center;align-items:center;gap:22px;font-size:52px}
+  .brand img{width:96px;height:96px;border-radius:26px;box-shadow:0 10px 24px #EA580C44}
+  .notif{position:absolute;top:1560px;left:60px;right:60px;background:#FFFFFFF2;border-radius:44px;padding:30px 38px;
+    box-shadow:0 30px 70px -10px #0B3B3855;font-weight:700;color:#1F2A29}
+  .nh{display:flex;align-items:center;gap:14px;font-size:30px;color:#5B6B69}
+  .nh img{width:42px;height:42px;border-radius:12px}.nh b{color:#1F2A29}
+  .nt{font-size:42px;font-weight:900;margin-top:14px}.nb{font-size:36px;margin-top:6px;color:#3F4D4C}
+  .file{position:absolute;width:190px;height:230px;border-radius:30px;background:#fff;display:flex;align-items:flex-end;justify-content:center;
+    padding-bottom:34px;font-size:56px;box-shadow:0 26px 50px -12px #0B3B3866;letter-spacing:1px}
+  .file::before{content:'';position:absolute;top:34px;left:36px;right:36px;height:14px;border-radius:7px;background:#E2E8E7;
+    box-shadow:0 30px 0 #E2E8E7, 0 60px 0 #E2E8E7}
+  .f1{top:1240px;left:30px;color:#DC2626;transform:rotate(-8deg)}
+  .f2{top:1420px;left:150px;color:#0D9488;transform:rotate(6deg)}
+  </style></head><body>${ribbons(W * N, H)}${slides}</body></html>`;
 }
 
 function featureHtml(c) {
-  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${BASE}
-  body{width:1024px;height:500px}
-  .h{position:absolute;top:0;bottom:0;${c.rtl ? 'right' : 'left'}:70px;width:560px;display:flex;align-items:center;font-size:64px;line-height:1.15}
-  .phone{position:absolute;top:70px;${c.rtl ? 'left' : 'right'}:90px;width:280px;height:600px;background:#0A0F0F;border-radius:40px;padding:9px;
-    box-shadow:0 0 0 2px #2B4B48, 0 20px 60px #000a;transform:rotate(${c.rtl ? -8 : 8}deg)}
-  .screen{width:100%;height:100%;border-radius:32px;overflow:hidden;background:url('${shot('home_active')}') 0 0/262px auto no-repeat}
-  </style></head><body><div class="h"><div>${headline(c.feature.h)}</div></div><div class="phone"><div class="screen"></div></div></body></html>`;
+  return `<!doctype html><html dir="${c.rtl ? 'rtl' : 'ltr'}"><head><meta charset="utf-8"><style>${FONT_CSS}
+  *{box-sizing:border-box;margin:0}
+  body{width:1024px;height:500px;overflow:hidden;position:relative;font-family:R,sans-serif;font-weight:900;color:${INK};
+    background:linear-gradient(180deg,#FFF8F1,#FFE8D2)}
+  .rib{position:absolute;left:0;top:0}
+  em{font-style:normal;color:${ORANGE}}
+  .t{position:absolute;top:0;bottom:0;${c.rtl ? 'right' : 'left'}:56px;width:640px;display:flex;flex-direction:column;justify-content:center;gap:26px}
+  .brand{display:flex;align-items:center;gap:16px;font-size:34px}
+  .brand img{width:64px;height:64px;border-radius:18px}
+  .h{font-size:52px;line-height:1.14;letter-spacing:-1px}
+  .ph{position:absolute;top:56px;${c.rtl ? 'left' : 'right'}:110px;transform:rotate(${c.rtl ? -6 : 6}deg)}
+  .phone{position:relative;background:#111716;box-shadow:0 0 0 2px #2E3B3A inset, 0 26px 50px -12px #0007}
+  .screen{width:100%;height:100%;background-repeat:no-repeat;background-position:0 0}
+  .cam{position:absolute;left:50%;border-radius:50%;background:#000}
+    .rib{opacity:.45}
+  </style></head><body>${ribbons(1024, 500)}
+  <div class="ph">${phone('home_active', 250)}</div>
+  <div class="t"><div class="brand"><img src="${ICON()}"><span>${esc(c.app)}</span></div><div class="h">${headline(c.feature.h)}</div></div>
+  </body></html>`;
 }
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1080, height: 1920 }, deviceScaleFactor: 1 });
-const render = async (html, w, h, file) => {
-  await page.setViewportSize({ width: w, height: h });
-  await page.setContent(html, { waitUntil: 'load' });
-  await page.evaluate(async () => { await document.fonts.load('900 50px R', 'אבג'); await document.fonts.load('700 50px R', 'abc'); });
-  await page.screenshot({ path: file, type: 'jpeg', quality: 92 });
-};
+const page = await browser.newPage({ deviceScaleFactor: 1 });
+const ready = () => page.evaluate(async () => { await document.fonts.load('900 50px R', 'אבג'); await document.fonts.load('700 50px R', 'אבג'); });
 for (const [locale, c] of Object.entries(COPY)) {
   const dir = path.join(OUT, locale, 'images');
   fs.rmSync(path.join(dir, 'phoneScreenshots'), { recursive: true, force: true });
   fs.mkdirSync(path.join(dir, 'phoneScreenshots'), { recursive: true });
-  for (const [i, s] of c.shots.entries()) await render(screenshotHtml(c, s), 1080, 1920, path.join(dir, 'phoneScreenshots', `${i + 1}.jpg`));
-  await render(featureHtml(c), 1024, 500, path.join(dir, 'featureGraphic.jpg'));
+  await page.setViewportSize({ width: W * N, height: H });
+  await page.setContent(panoramaHtml(c), { waitUntil: 'load' });
+  await ready();
+  // RTL: the story reads right to left, but the store lays screenshots out left to right, so the panorama
+  // is cut in canvas order either way and the first slide is the leftmost.
+  for (let i = 0; i < N; i++) {
+    await page.screenshot({ path: path.join(dir, 'phoneScreenshots', `${i + 1}.jpg`), type: 'jpeg', quality: 92,
+      clip: { x: i * W, y: 0, width: W, height: H } });
+  }
+  await page.setViewportSize({ width: 1024, height: 500 });
+  await page.setContent(featureHtml(c), { waitUntil: 'load' });
+  await ready();
+  await page.screenshot({ path: path.join(dir, 'featureGraphic.jpg'), type: 'jpeg', quality: 92 });
 }
 await browser.close();
 console.log('saved to', OUT);
